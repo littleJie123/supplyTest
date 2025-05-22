@@ -1,0 +1,24 @@
+import { HttpAction, IHttpActionParam } from "fasttest";
+
+export default class extends HttpAction{
+  protected getDefHttpParam(): IHttpActionParam {
+    return {
+      name:'查询订单商品列表',
+      url:'/app/note/listNote',
+      method:'POST',
+      param:{
+        supplierId: "${variable.supplier.supplierId}", 
+        warehouseId: "${variable.warehouse.warehouseId}", 
+        status: "normal", 
+        warehouseGroupId: "${variable.warehouse.warehouseGroupId}",
+      }
+    }
+  }
+
+  protected buildVariable(result: any) {
+    
+    return {
+      note: result.result.content[0],
+    }
+  }
+}
