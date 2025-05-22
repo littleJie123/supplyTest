@@ -1,4 +1,4 @@
-import { UrlAction } from "fasttest";
+import { UrlAction } from "testflow";
 export default class extends UrlAction {
     protected getHttpUrl(): string;
     protected buildVariable(result: any): {

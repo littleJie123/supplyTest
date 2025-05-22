@@ -3,12 +3,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const fasttest_1 = require("fasttest");
+const testflow_1 = require("testflow");
 const FindLastUserId_1 = __importDefault(require("../action/user/FindLastUserId"));
 const GetOpenId_1 = __importDefault(require("../action/user/GetOpenId"));
 const AddSupplier_1 = __importDefault(require("../action/supplier/AddSupplier"));
 const AddMaterial_1 = __importDefault(require("../action/material/AddMaterial"));
-class default_1 extends fasttest_1.TestCase {
+class default_1 extends testflow_1.TestCase {
     buildActions() {
         return [
             new FindLastUserId_1.default(),

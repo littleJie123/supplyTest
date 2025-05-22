@@ -1,5 +1,5 @@
 {
-  "name": "suppyTest",
+  "name": "suppytest",
   "version": "1.0.3",
   "description": "一个单元测试框架",
   "main": "dist/main.js",
@@ -25,6 +25,6 @@
     "typescript": "^5.7.3"
   },
   "dependencies": {
-    "fasttest": "https://github.com/littleJie123/fasttest"
+    "testflow": "https://github.com/littleJie123/testflow.git"
   }
 }

@@ -1,5 +1,4 @@
-import { TestCase } from "fasttest";
-import ITest from "fasttest/dist/inf/ITest";
+import { TestCase,ITest } from "testflow"; 
 import TestReg from "./TestReg";
 import ListMaterial from "../action/material/ListMaterial";
 import CreateNote from "../action/note/CreateNote";

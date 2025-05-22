@@ -1,5 +1,5 @@
-import { TestCase } from "fasttest";
-import ITest from "fasttest/dist/inf/ITest";
+import { TestCase,ITest } from "testflow";
+
 import FindLastUserId from "../action/user/FindLastUserId";
 import GetOpenId from "../action/user/GetOpenId";
 import AddSupplier from "../action/supplier/AddSupplier";

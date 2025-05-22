@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-const fasttest_1 = require("fasttest");
-class GetOpenId extends fasttest_1.UrlAction {
+const testflow_1 = require("testflow");
+class GetOpenId extends testflow_1.UrlAction {
     getMethod() {
         return 'GET';
     }

@@ -1,4 +1,4 @@
-import { BaseTest, UrlAction } from "fasttest";
+import { BaseTest, UrlAction } from "testflow";
 
 export default class  extends UrlAction {
   

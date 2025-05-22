@@ -1,4 +1,4 @@
-import { TestRunner } from "fasttest";
+import { TestRunner } from "testflow";
 import path from "path";
 const runner = TestRunner.get();
 runner.regEnvConfig('local',{

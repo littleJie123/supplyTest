@@ -3,14 +3,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const fasttest_1 = require("fasttest");
+const testflow_1 = require("testflow");
 const TestReg_1 = __importDefault(require("./TestReg"));
 const ListMaterial_1 = __importDefault(require("../action/material/ListMaterial"));
 const CreateNote_1 = __importDefault(require("../action/note/CreateNote"));
 const ListNote_1 = __importDefault(require("../action/note/ListNote"));
 const ListNoteItem_1 = __importDefault(require("../action/note/ListNoteItem"));
 const Instock_1 = __importDefault(require("../action/note/Instock"));
-class default_1 extends fasttest_1.TestCase {
+class default_1 extends testflow_1.TestCase {
     buildActions() {
         return [
             new TestReg_1.default(),

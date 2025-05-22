@@ -1,4 +1,4 @@
-import { HttpAction } from "fasttest";
+import { HttpAction } from "testflow";
 export default class extends HttpAction {
     constructor();
     protected buildVariable(result: any): {

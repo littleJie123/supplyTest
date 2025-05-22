@@ -1,4 +1,4 @@
-import { HttpAction, IHttpActionParam, TestCase } from "fasttest";
+import { HttpAction, IHttpActionParam, TestCase } from "testflow";
 
 export default class extends HttpAction{
   protected getDefHttpParam(): IHttpActionParam {

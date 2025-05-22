@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-const fasttest_1 = require("fasttest");
+const testflow_1 = require("testflow");
 function createParam(name) {
     return {
         method: 'POST',
@@ -25,7 +25,7 @@ function createParam(name) {
         }
     };
 }
-class default_1 extends fasttest_1.HttpAction {
+class default_1 extends testflow_1.HttpAction {
     constructor(name) {
         super(createParam(name));
     }

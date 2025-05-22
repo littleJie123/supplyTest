@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-const fasttest_1 = require("fasttest");
-class default_1 extends fasttest_1.HttpAction {
+const testflow_1 = require("testflow");
+class default_1 extends testflow_1.HttpAction {
     getDefHttpParam() {
         return {
             name: '查询订单明细',

@@ -1,5 +1,4 @@
-import { TestCase } from "fasttest";
-import ITest from "fasttest/dist/inf/ITest";
+import { TestCase, ITest } from "testflow";
 export default class extends TestCase {
     buildActions(): ITest[];
     getName(): string;

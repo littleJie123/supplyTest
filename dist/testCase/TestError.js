@@ -3,12 +3,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const fasttest_1 = require("fasttest");
+const testflow_1 = require("testflow");
 const AddSupplier_1 = __importDefault(require("../action/supplier/AddSupplier"));
-class TestError extends fasttest_1.TestCase {
+class TestError extends testflow_1.TestCase {
     buildActions() {
         return [
-            new fasttest_1.SetVariable({
+            new testflow_1.SetVariable({
                 name: 'warehouse',
                 variable: {
                     warehouse: {

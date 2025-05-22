@@ -1,5 +1,5 @@
-import { SetVariable, TestCase } from "fasttest"
-import ITest from "fasttest/dist/inf/ITest"
+import { SetVariable, TestCase,ITest } from "testflow"
+
 import AddSupplier from "../action/supplier/AddSupplier"
 
 export default class TestError extends TestCase{

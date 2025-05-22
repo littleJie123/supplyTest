@@ -1,4 +1,4 @@
-import { HttpAction, IHttpActionParam } from "fasttest";
+import { HttpAction, IHttpActionParam } from "testflow";
 
 function createParam(name: string): IHttpActionParam {
 
