@@ -25,10 +25,10 @@ class default_1 extends testflow_1.HttpAction {
             });
         }
         return {
-            "warehouseId": "${variable.warehouse.warehouseId}",
-            "noteId": "${variable.note.noteId}",
+            "warehouseId": "${warehouse.warehouseId}",
+            "noteId": "${note.noteId}",
             "items": items,
-            "warehouseGroupId": "${variable.warehouse.warehouseGroupId}",
+            "warehouseGroupId": "${warehouse.warehouseGroupId}",
         };
     }
 }

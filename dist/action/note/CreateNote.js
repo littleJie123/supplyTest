@@ -10,8 +10,8 @@ class default_1 extends testflow_1.HttpAction {
             param: {
                 "items": [
                     {
-                        "materialId": "${variable.materialMap.酱油.materialId}",
-                        "supplierId": "${variable.supplier.supplierId}",
+                        "materialId": "${materialMap.酱油.materialId}",
+                        "supplierId": "${supplier.supplierId}",
                         "cnt": 15000,
                         "buyUnitFee": 1,
                         "stockUnitsId": 18,
@@ -19,8 +19,8 @@ class default_1 extends testflow_1.HttpAction {
                         "stockBuyUnitFee": -500
                     },
                     {
-                        "materialId": "${variable.materialMap.米醋.materialId}",
-                        "supplierId": "${variable.supplier.supplierId}",
+                        "materialId": "${materialMap.米醋.materialId}",
+                        "supplierId": "${supplier.supplierId}",
                         "cnt": 10000,
                         "buyUnitFee": 1,
                         "stockUnitsId": 18,
@@ -28,8 +28,8 @@ class default_1 extends testflow_1.HttpAction {
                         "stockBuyUnitFee": -500
                     },
                     {
-                        "materialId": "${variable.materialMap.白酒.materialId}",
-                        "supplierId": "${variable.supplier.supplierId}",
+                        "materialId": "${materialMap.白酒.materialId}",
+                        "supplierId": "${supplier.supplierId}",
                         "cnt": 5000,
                         "buyUnitFee": 1,
                         "stockUnitsId": 18,
@@ -37,8 +37,8 @@ class default_1 extends testflow_1.HttpAction {
                         "stockBuyUnitFee": -500
                     }
                 ],
-                "warehouseId": "${variable.warehouse.warehouseId}",
-                "warehouseGroupId": "${variable.warehouse.warehouseGroupId}"
+                "warehouseId": "${warehouse.warehouseId}",
+                "warehouseGroupId": "${warehouse.warehouseGroupId}"
             }
         };
     }

@@ -13,4 +13,11 @@ export default class extends HttpAction{
       }
     }
   }
+
+  getParamMeta() {
+    return {
+      warehouseId:'warehouse.warehouseId',
+      warehouseGroupId:'warehouse.warehouseGroupId',
+    }
+  }
 }

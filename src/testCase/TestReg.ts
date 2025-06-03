@@ -1,4 +1,4 @@
-import { TestCase,ITest } from "testflow";
+import { TestCase,ITest, BaseTest } from "testflow";
 
 import FindLastUserId from "../action/user/FindLastUserId";
 import GetOpenId from "../action/user/GetOpenId";
@@ -6,7 +6,7 @@ import AddSupplier from "../action/supplier/AddSupplier";
 import AddMaterial from "../action/material/AddMaterial";
 
 export default class extends TestCase{
-  buildActions(): ITest[] {
+  buildActions(): BaseTest[] {
     return [
       new FindLastUserId(),
       new GetOpenId(),

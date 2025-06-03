@@ -1,4 +1,4 @@
-import { TestCase,ITest } from "testflow"; 
+import { TestCase,ITest, BaseTest } from "testflow"; 
 import TestReg from "./TestReg";
 import ListMaterial from "../action/material/ListMaterial";
 import CreateNote from "../action/note/CreateNote";
@@ -7,7 +7,7 @@ import ListNoteItem from "../action/note/ListNoteItem";
 import Instock from "../action/note/Instock";
 
 export default class extends TestCase {
-  buildActions(): ITest[] {
+  buildActions(): BaseTest[] {
     return [
       new TestReg(),
       new ListMaterial(),

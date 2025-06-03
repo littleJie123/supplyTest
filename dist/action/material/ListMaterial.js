@@ -8,8 +8,8 @@ class default_1 extends testflow_1.HttpAction {
             url: '/app/material/listMaterialByCategory',
             method: 'POST',
             param: {
-                warehouseGroupId: '${variable.warehouse.warehouseGroupId}',
-                warehouseId: '${variable.warehouse.warehouseId}'
+                warehouseGroupId: '${warehouse.warehouseGroupId}',
+                warehouseId: '${warehouse.warehouseId}'
             }
         });
     }

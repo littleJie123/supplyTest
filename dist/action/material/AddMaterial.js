@@ -13,15 +13,15 @@ function createParam(name) {
             "suppliers": [
                 {
                     "isDef": true,
-                    "supplierId": "${variable.supplier.supplierId}",
+                    "supplierId": "${supplier.supplierId}",
                     "name": "测试供应商",
                     "price": 21
                 }
             ],
             "img": [],
             "name": name,
-            "warehouseId": "${variable.warehouse.warehouseId}",
-            "warehouseGroupId": "${variable.warehouse.warehouseGroupId}"
+            "warehouseId": "${warehouse.warehouseId}",
+            "warehouseGroupId": "${warehouse.warehouseGroupId}"
         }
     };
 }

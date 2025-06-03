@@ -1,5 +1,5 @@
-import { TestCase, ITest } from "testflow";
+import { TestCase, BaseTest } from "testflow";
 export default class extends TestCase {
-    buildActions(): ITest[];
+    buildActions(): BaseTest[];
     getName(): string;
 }

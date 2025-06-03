@@ -7,8 +7,8 @@ export default class extends HttpAction{
       url:'/app/noteItem/listNoteItem',
       method:'GET',
       param:{
-        noteId: "${variable.note.noteId}",
-        warehouseGroupId: "${variable.warehouse.warehouseGroupId}",
+        noteId: "${note.noteId}",
+        warehouseGroupId: "${warehouse.warehouseGroupId}",
       }
     }
   }

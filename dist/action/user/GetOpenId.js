@@ -6,7 +6,7 @@ class GetOpenId extends testflow_1.UrlAction {
         return 'GET';
     }
     getHttpUrl() {
-        return '/free/getOpenId?code=${variable.openid}';
+        return '/free/getOpenId?code=${openid}';
     }
     buildVariable(result) {
         return {

@@ -7,10 +7,10 @@ export default class extends HttpAction{
       url:'/app/note/listNote',
       method:'POST',
       param:{
-        supplierId: "${variable.supplier.supplierId}", 
-        warehouseId: "${variable.warehouse.warehouseId}", 
+        supplierId: "${supplier.supplierId}", 
+        warehouseId: "${warehouse.warehouseId}", 
         status: "normal", 
-        warehouseGroupId: "${variable.warehouse.warehouseGroupId}",
+        warehouseGroupId: "${warehouse.warehouseGroupId}",
       }
     }
   }

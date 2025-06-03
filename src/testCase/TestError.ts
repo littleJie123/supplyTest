@@ -1,9 +1,9 @@
-import { SetVariable, TestCase,ITest } from "testflow"
+import { SetVariable, TestCase,ITest, BaseTest } from "testflow"
 
 import AddSupplier from "../action/supplier/AddSupplier"
 
 export default class TestError extends TestCase{
-  buildActions(): ITest[] {
+  buildActions(): BaseTest[] {
     return [
       new SetVariable({
         name:'warehouse',

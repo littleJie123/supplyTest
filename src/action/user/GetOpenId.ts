@@ -5,7 +5,7 @@ export default class GetOpenId extends UrlAction{
     return 'GET';
   }
   protected getHttpUrl(): string {
-    return '/free/getOpenId?code=${variable.openid}';
+    return '/free/getOpenId?code=${openid}';
   }
 
   protected buildVariable(result: any) {

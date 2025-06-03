@@ -8,7 +8,7 @@ export default class AddSupplier extends HttpAction {
       url:'/app/supplier/addsupplier',
       param:{
         "name":"我的供应商",
-        "warehouseGroupId":"${variable.warehouse.warehouseGroupId}"
+        "warehouseGroupId":"${warehouse.warehouseGroupId}"
       }
     }
   }

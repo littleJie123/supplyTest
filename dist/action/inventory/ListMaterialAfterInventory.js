@@ -14,5 +14,11 @@ class default_1 extends testflow_1.HttpAction {
             }
         };
     }
+    getParamMeta() {
+        return {
+            warehouseId: 'warehouse.warehouseId',
+            warehouseGroupId: 'warehouse.warehouseGroupId',
+        };
+    }
 }
 exports.default = default_1;

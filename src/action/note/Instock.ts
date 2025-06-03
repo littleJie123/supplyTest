@@ -26,10 +26,10 @@ export default class extends HttpAction {
       })
     }
     return {
-      "warehouseId": "${variable.warehouse.warehouseId}",
-      "noteId": "${variable.note.noteId}",
+      "warehouseId": "${warehouse.warehouseId}",
+      "noteId": "${note.noteId}",
       "items": items,
-      "warehouseGroupId": "${variable.warehouse.warehouseGroupId}",
+      "warehouseGroupId": "${warehouse.warehouseGroupId}",
     }
   }
 }
