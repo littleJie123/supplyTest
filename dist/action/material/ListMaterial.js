@@ -17,7 +17,9 @@ class default_1 extends testflow_1.HttpAction {
         let content = result.result.content;
         let materialMap = {};
         for (let row of content) {
-            materialMap[row.name] = row;
+            materialMap[row.name] = {
+                materialId: row.materialId
+            };
         }
         return {
             materialMap

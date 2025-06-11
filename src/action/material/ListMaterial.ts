@@ -17,7 +17,9 @@ export default class extends HttpAction{
     let content = result.result.content;
     let materialMap:any = {};
     for(let row of content){
-      materialMap[row.name] = row;
+      materialMap[row.name] = {
+        materialId:row.materialId
+      };
     }
     return {
       materialMap
