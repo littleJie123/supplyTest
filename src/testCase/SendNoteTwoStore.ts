@@ -29,6 +29,9 @@ export default class extends TestCase{
           warehouse:{
             warehouseId:193,
             warehouseGroupId:1244
+          },
+          supplier:{
+            supplierId:199
           }
         }
       }),

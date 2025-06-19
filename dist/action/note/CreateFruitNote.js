@@ -37,6 +37,7 @@ class default_1 extends testflow_1.HttpAction {
         return {
             warehouseId: 'warehouse.warehouseId',
             warehouseGroupId: 'warehouse.warehouseGroupId',
+            supplierId: 'supplier.supplierId',
             materialId: [
                 'materialMap.车厘子.materialId',
                 'materialMap.小番茄.materialId'

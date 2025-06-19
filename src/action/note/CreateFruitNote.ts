@@ -38,6 +38,7 @@ export default class extends HttpAction {
     return {
       warehouseId:'warehouse.warehouseId',
       warehouseGroupId:'warehouse.warehouseGroupId',
+      supplierId:'supplier.supplierId',
       materialId:[
         'materialMap.车厘子.materialId',
         'materialMap.小番茄.materialId'

@@ -4,6 +4,7 @@ export default class extends HttpAction {
     getParamMeta(): {
         warehouseId: string;
         warehouseGroupId: string;
+        supplierId: string;
         materialId: string[];
     };
 }
