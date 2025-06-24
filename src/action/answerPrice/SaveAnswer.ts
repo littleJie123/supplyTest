@@ -3,6 +3,7 @@ import { HttpAction, IHttpActionParam } from "testflow";
 export default class extends HttpAction {
   protected getDefHttpParam(): IHttpActionParam {
     return {
+      name:'保存报价',
       method: "POST",
       url: "/app/askPrice/saveAnswer",
       param: {

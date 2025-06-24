@@ -4,6 +4,7 @@ const testflow_1 = require("testflow");
 class default_1 extends testflow_1.HttpAction {
     getDefHttpParam() {
         return {
+            name: '保存报价',
             method: "POST",
             url: "/app/askPrice/saveAnswer",
             param: {
