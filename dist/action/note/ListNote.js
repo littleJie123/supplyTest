@@ -4,7 +4,7 @@ const testflow_1 = require("testflow");
 class default_1 extends testflow_1.HttpAction {
     getDefHttpParam() {
         return {
-            name: '查询订单商品列表',
+            name: '查询订单',
             url: '/app/note/listNote',
             method: 'POST',
             param: {

@@ -3,14 +3,15 @@ import { HttpAction, IHttpActionParam } from "testflow";
 export default class extends HttpAction{
   protected getDefHttpParam(): IHttpActionParam {
     return {
-      name:'查询订单',
-      url:'/app/note/listNote',
+      name:'订单根据时间',
+      url:'/app/note/listNoteDay',
       method:'POST',
       param:{
-        supplierId: "${supplier.supplierId}", 
-        warehouseId: "${warehouse.warehouseId}", 
         status: "normal", 
-        warehouseGroupId: "${warehouse.warehouseGroupId}",
+        warehouseId: 193, 
+        warehouseGroupId: 1244,
+        sysAddTime:'06-20'
+
       }
     }
   }
