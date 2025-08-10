@@ -1,6 +1,7 @@
-import { HttpAction, IHttpActionParam } from "testflow";
+import { HttpAction } from "testflow";
 export default class AddSupplier extends HttpAction {
-    protected getDefHttpParam(): IHttpActionParam;
+    private name;
+    constructor(name: any);
     protected buildVariable(result: any): {
         supplier: any;
     };

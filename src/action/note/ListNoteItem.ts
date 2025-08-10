@@ -14,7 +14,7 @@ export default class extends HttpAction{
   }
 
   protected buildVariable(result: any) {
-
+   
     return {
       noteItem: result.result.content,
     }

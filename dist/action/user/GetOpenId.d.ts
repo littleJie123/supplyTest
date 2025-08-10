@@ -4,6 +4,7 @@ export default class GetOpenId extends UrlAction {
     protected getHttpUrl(): string;
     protected buildVariable(result: any): {
         warehouse: any;
+        token: any;
     };
     getName(): string;
 }

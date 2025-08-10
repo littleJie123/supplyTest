@@ -1,18 +1,21 @@
 import { HttpAction,IHttpActionParam } from "testflow"; 
 
 export default class AddSupplier extends HttpAction {
-  protected getDefHttpParam(): IHttpActionParam {
-    return {
-      name:'增加卖家',
+  private name:string;
+  constructor(name){
+    
+    super({
+      name:'增加卖家:'+name,
       method:'POST',
       url:'/app/supplier/addsupplier',
       param:{
-        "name":"我的供应商",
+        "name":name,
         "warehouseGroupId":"${warehouse.warehouseGroupId}"
       }
-    }
+    })
+    this.name = name;
   }
-
+  
   
   
   protected buildVariable(result: any) {

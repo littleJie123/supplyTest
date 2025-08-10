@@ -10,7 +10,8 @@ class GetOpenId extends testflow_1.UrlAction {
     }
     buildVariable(result) {
         return {
-            warehouse: result.result.warehouse
+            warehouse: result.result.warehouse,
+            token: result.result.token.token
         };
     }
     getName() {

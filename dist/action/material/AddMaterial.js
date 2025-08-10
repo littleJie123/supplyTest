@@ -1,20 +1,20 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const testflow_1 = require("testflow");
-function createParam(name) {
+function createParam(name, opt) {
+    var _a, _b;
     return {
         method: 'POST',
         name: '增加商品：' + name,
         url: '/app/material/SaveMaterial',
         param: {
-            "buyUnit": [
-                { "fee": 1, "name": "ml" }, { "isSupplier": true, "name": "瓶", "fee": 500 }
+            "buyUnit": (_a = opt === null || opt === void 0 ? void 0 : opt.buyUnit) !== null && _a !== void 0 ? _a : [
+                { "isSupplier": true, "name": "瓶", "fee": 1 }
             ],
-            "suppliers": [
+            "suppliers": (_b = opt === null || opt === void 0 ? void 0 : opt.suppliers) !== null && _b !== void 0 ? _b : [
                 {
                     "isDef": true,
-                    "supplierId": "${supplier.supplierId}",
-                    "name": "测试供应商",
+                    "supplierId": "${supplierMap.供应商1}",
                     "price": 21
                 }
             ],
@@ -26,8 +26,13 @@ function createParam(name) {
     };
 }
 class default_1 extends testflow_1.HttpAction {
-    constructor(name) {
-        super(createParam(name));
+    constructor(name, opt) {
+        super(createParam(name, opt));
+    }
+    buildVariable(result) {
+        return {
+            lastMaterialId: result.result.materialId
+        };
     }
 }
 exports.default = default_1;

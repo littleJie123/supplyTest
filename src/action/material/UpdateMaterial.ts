@@ -1,27 +1,28 @@
 import { HttpAction, IHttpActionParam } from "testflow";
 interface Opt{
   buyUnit?:any[]
-  suppliers?:any[]
 }
-function createParam(name: string,opt?:Opt): IHttpActionParam {
+
+function createParam(name:string,opt?:Opt): IHttpActionParam {
 
   return {
     method:'POST',
-    name:'增加商品：'+name,
-    url:'/app/material/SaveMaterial',
+    name:'更改物料:'+name,
+    url:'/app/material/updateMaterial',
     param: {
+      name,
+      "materialId":"${lastMaterialId}",
       "buyUnit": opt?.buyUnit ?? [
-        { "isSupplier": true, "name": "瓶", "fee": 1 }
+        {  "name": "g", isSupplier:true },{  "name": "瓶", fee:500 }
       ],
-      "suppliers": opt?.suppliers ?? [
+      "suppliers": [
         {
           "isDef": true,
           "supplierId": "${supplierMap.供应商1}",
           
-          "price": 21
+          "price": 0.2
         }],
       "img": [],
-      "name": name,
       "warehouseId": "${warehouse.warehouseId}",
       "warehouseGroupId": "${warehouse.warehouseGroupId}"
     }
@@ -30,16 +31,11 @@ function createParam(name: string,opt?:Opt): IHttpActionParam {
 }
 
 export default class extends HttpAction {
-
-  constructor(name,opt?:Opt) {
+  constructor(name:string,opt?:Opt){
     super(createParam(name,opt))
-
   }
+   
 
-  protected buildVariable(result: any) {
-    return {
-      lastMaterialId:result.result.materialId
-    }
-  }
+  
 
 }

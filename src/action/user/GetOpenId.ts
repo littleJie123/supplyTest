@@ -11,7 +11,8 @@ export default class GetOpenId extends UrlAction{
   protected buildVariable(result: any) {
 
     return {
-      warehouse:result.result.warehouse
+      warehouse:result.result.warehouse,
+      token:result.result.token.token
     };
   }
 
