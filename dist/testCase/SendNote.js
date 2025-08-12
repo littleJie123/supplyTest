@@ -4,7 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const testflow_1 = require("testflow");
-const TestReg_1 = __importDefault(require("./TestReg"));
+const FlowReg_1 = __importDefault(require("./FlowReg"));
 const ListMaterial_1 = __importDefault(require("../action/material/ListMaterial"));
 const CreateNote_1 = __importDefault(require("../action/note/CreateNote"));
 const ListNote_1 = __importDefault(require("../action/note/ListNote"));
@@ -13,7 +13,7 @@ const Instock_1 = __importDefault(require("../action/note/Instock"));
 class default_1 extends testflow_1.TestCase {
     buildActions() {
         return [
-            new TestReg_1.default(),
+            new FlowReg_1.default(),
             new ListMaterial_1.default(),
             new CreateNote_1.default(),
             new ListNote_1.default(),

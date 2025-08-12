@@ -15,6 +15,5 @@ if (process.argv.length > 2) {
 }
 runner.start({
     testPath: path_1.default.join(__dirname, './testCase'),
-    actionPath: path_1.default.join(__dirname, './action'),
     testId: testId
 });

@@ -6,6 +6,7 @@ import CreateNote3M from "../action/note/CreateNote3M";
 import ListNoteItem from "../action/noteItem/ListNoteItem";
 import ListNoteGroup from "../action/note/ListNoteGroup";
 import UpdatePurchase from "../action/note/UpdatePurchase";
+import ListNoteFromGroup from "../action/note/ListNoteFromGroup";
 
 
 export default class extends TestCase {
@@ -49,10 +50,7 @@ export default class extends TestCase {
         supplierName:'供应商2',
         len:1
       }),
-      new ListNoteGroup({
-        groupType:'NoteDay',
-        len:1
-      }),
+      
       new ListNoteGroup({
         groupType:'SupplierList4Note',
         len:2
@@ -60,12 +58,22 @@ export default class extends TestCase {
       new ListNoteGroup({
         groupType:'Material4NoteList',
         len:3
+      }),
+      new ListNoteGroup({
+        groupType:'NoteDay',
+        len:1,
+        noteCnt:2
+      }),
+      new ListNoteFromGroup({
+        notes:[
+          {cost:670},
+          {cost:500}
+        ]
       })
-
     ]
   }
   getName(): string {
-    return '订单逻辑链路'
+    return '下单流程'
   }
 
 }

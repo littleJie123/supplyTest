@@ -10,7 +10,6 @@ if(process.argv.length > 2){
 }
 runner.start({
   testPath:path.join(__dirname,'./testCase'),
-  actionPath:path.join(__dirname,'./action'),
   testId:testId
 
 })

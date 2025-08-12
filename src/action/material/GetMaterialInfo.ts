@@ -31,7 +31,9 @@ export default class extends HttpAction {
       let supplier = result.result.suppliers.find(row=>row.isDef==1)
       this.expectEqualObj(supplier,
         this.checkObj)
-      this.expectEqual(supplier.supplierId,variable.supplierMap[this.supplierName])
+      if(this.supplierName){
+        this.expectEqual(supplier.supplierId,variable.supplierMap[this.supplierName])
+      }
       if(this.len){
         this.expectEqual(result.result.suppliers.length,this.len);
       }

@@ -1,13 +1,22 @@
 import { HttpAction } from "testflow";
-
-export default class extends HttpAction {
-  constructor() {
-    super({
+interface TestOpt{
+  items?:any[]
+  /**
+   * 检查的notes
+   */
+  checkNotes?:any[]
+  /**
+   * 不要创建变量
+   */
+  noBuildSupplier?:boolean
+}
+function createParam(opt:TestOpt){
+  return {
       name:'提交订单',
       url:'/app/note/createNote',
       method:'post',
       param: {
-        "items": [
+        "items": opt?.items ?? [
           {
             "materialId": '${materialMap.牛肉.materialId}',
             "supplierId": '${supplierMap.供应商2}',
@@ -39,30 +48,57 @@ export default class extends HttpAction {
         "warehouseId": '${warehouse.warehouseId}',
         "warehouseGroupId": '${warehouse.warehouseGroupId}'
       }
-    })
+    }
+}
+export default class extends HttpAction {
+  private testOpt:TestOpt
+  constructor(opt?:TestOpt) {
+    if(opt == null){
+      opt = {};
+    }
+    super(createParam(opt));
+    this.testOpt = opt;
   }
 
 
   protected buildVariable(result: any) {
-    let content:any[] = result.result;
-    let supplier1 = content.find(row=>row.supplierName=='供应商1');
-    let supplier2 = content.find(row=>row.supplierName=='供应商2');
-    return {
-      noteMap:{
-        '供应商1':supplier1.noteId,
-        '供应商2':supplier2.noteId
+    if(!this.testOpt.noBuildSupplier){
+      let content:any[] = result.result;
+      let supplier1 = content.find(row=>row.supplierName=='供应商1');
+      let supplier2 = content.find(row=>row.supplierName=='供应商2');
+      return {
+        noteMap:{
+          '供应商1':supplier1?.noteId,
+          '供应商2':supplier2?.noteId
+        }
       }
     }
   }
 
+  protected getCheckNotes():any[]{
+    let ret = this.testOpt?.checkNotes;
+    if(ret == null ){
+      ret = [ 
+        {
+          materialCnt:2,
+          cost:846
+        },{
+          materialCnt:1,
+          cost:500
+        }
+      ]
+    }
+    return ret;
+  }
+
   protected async checkResult(result: any): Promise<void> {
     let content:any[] = result.result;
-    let supplier1 = content.find(row=>row.supplierName=='供应商1');
-    let supplier2 = content.find(row=>row.supplierName=='供应商2');
-    this.expectEqual(supplier1.materialCnt,2);
-    this.expectEqual(supplier1.cost,846)
+    let notes:any[] = this.getCheckNotes()
+    if(notes != null){
+      for(let note of notes){
+        this.expectFind(content,note)
+      }
+    }
 
-    this.expectEqual(supplier2.materialCnt,1);
-    this.expectEqual(supplier2.cost,500)
   }
 }
