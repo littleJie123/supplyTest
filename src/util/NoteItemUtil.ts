@@ -1,4 +1,7 @@
 export default class {
+  static buildCntAndPrice(content: any[]):ICntAndPrice {
+    throw new Error("Method not implemented.");
+  }
   static change(noteItems: any[]) {
     let retList: any[] = [];
     for (let item of noteItems) {

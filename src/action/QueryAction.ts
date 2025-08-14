@@ -1,4 +1,5 @@
-import { HttpAction, IHttpActionParam } from "testflow";
+import { HttpAction, IAfterProcess, IHttpActionParam } from "testflow";
+import IOpt from "../inf/IOpt";
 
 interface TestOpt{
   url:string;
@@ -11,28 +12,27 @@ interface TestOpt{
     len?:number
   }
 }
-function create(opt:TestOpt):IHttpActionParam{
+function create(opt:TestOpt,afterProcess:IOpt):IHttpActionParam{
   let query = opt.query ?? {};
+  let warehouse = afterProcess?.warehouseType ?? 'warehouse'
   return {
     url:opt.url,
     name:opt.name??'查询接口',
     method:opt.method,
     param:{
       ... query,
-      warehouseGroupId:'${warehouse.warehouseGroupId}'
+      warehouseGroupId:`\${${warehouse}.warehouseGroupId}`
     }
   }
 }
 export default class extends HttpAction{
   private testOpt:TestOpt
-  constructor(opt:TestOpt){
-    super(create(opt));
+  constructor(opt:TestOpt,afterProcess?:IOpt){
+    super(create(opt,afterProcess),afterProcess);
     this.testOpt = opt;
   }
 
-  protected buildVariable(result: any) {
-    
-  }
+
 
   protected async checkResult(result: any): Promise<void> {
     await super.checkResult(result)

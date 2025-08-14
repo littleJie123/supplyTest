@@ -24,8 +24,10 @@ function create(opt:TestOpt):IHttpActionParam{
   }
 
 export default class extends HttpAction{
+  private testOpt?:TestOpt
   constructor(opt?:TestOpt){
     super(create(opt))
+    this.testOpt = opt;
   }
 
   protected parseHttpParam() {
@@ -40,9 +42,9 @@ export default class extends HttpAction{
   }
 
   protected buildVariable(result: any) {
-
+    let variableType = this.testOpt?.variableType??'warehouse'
     return {
-      warehouse:result.result
+      [variableType]:result.result
     };
   }
 

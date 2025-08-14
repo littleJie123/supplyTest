@@ -1,10 +1,12 @@
 import { HttpAction, IHttpActionParam } from "testflow";
+import IOpt from "../../inf/IOpt";
+import WarehouseUtil from "../../util/WarehouseUtil";
 
 interface Opt {
   action?: string
 }
 
-function create(opt: Opt): IHttpActionParam {
+function create(opt: Opt,afterProcess?:IOpt): IHttpActionParam {
   return {
     name: '批量处理：' + opt.action,
     url: '/app/note/batchProcessNote',
@@ -12,11 +14,11 @@ function create(opt: Opt): IHttpActionParam {
     
     param: {
       "query":  { "day": "${noteGroup.day}", "status": "${noteGroup.status}" },
-      "warehouseId": "${warehouse.warehouseId}",
+      
       "action": opt.action ?? "instock",
       "groupType": "${noteGroup.groupType}",
       "type": "${noteGroup.type}",
-      "warehouseGroupId": "${warehouse.warehouseGroupId}"
+      ... WarehouseUtil.get(afterProcess)
     }
   }
 
@@ -25,8 +27,8 @@ function create(opt: Opt): IHttpActionParam {
 
 export default class extends HttpAction {
 
-  constructor(opt: Opt) {
-    super(create(opt))
+  constructor(opt: Opt,afterProcess?:IOpt) {
+    super(create(opt,afterProcess),afterProcess)
   }
 
   protected buildVariable(result: any) {

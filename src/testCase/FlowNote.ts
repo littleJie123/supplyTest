@@ -1,4 +1,4 @@
-import { BaseTest, TestCase } from "testflow";
+import { BaseTest, CheckUtil, TestCase } from "testflow";
 import ListMaterial from "../action/material/ListMaterial";
 import AddPurcharse from "../action/note/AddPurcharse";
 import CreateNote3M from "../action/note/CreateNote3M";
@@ -18,6 +18,9 @@ import UpdatePrice4Note from "../action/price/UpdatePrice4Note";
 import UpdatePrice4Material from "../action/price/UpdatePrice4Material";
 import GetMaterialInfo from "../action/material/GetMaterialInfo";
 import ListNoteByQuery from "../action/note/ListNoteByQuery";
+import QueryAction from "../action/QueryAction";
+import ProcessNote from "../action/note/ProcessNote";
+import SplitNote from "../action/note/SplitNote";
 
 /**
  * 订单流程
@@ -179,6 +182,78 @@ export default class extends TestCase {
         },
         checkNotes:[
           {cost:1106},
+          {cost:500},
+          {cost:806}
+        ]
+      }),
+      new QueryAction({
+        name:'查询订单物料',
+        url:'/app/noteItem/listNoteItem',
+        query:{
+          noteId:"${noteMap.806}"
+        }
+      },{
+        buildVariable(result){
+          return {
+            noteItems:result.result.content
+          }
+        }
+      }),
+
+      new ProcessNote({
+        
+        noteId:"${noteMap.806}",
+        noteItems:"${noteItems}",
+        buildItem(item){
+          return {
+            ... item,
+            instockCnt:item.cnt / 2
+          }
+        }
+      }),
+      new QueryAction({
+        name:'查询已处理订单',
+        url:'/app/note/listNote',
+        query:{
+          status:'instocked'
+        }
+        
+      },{
+        check(result) {
+          let content:any[] = result.result.content;
+          for(let row of content){
+            CheckUtil.expectEqual(row.instockCost,row.cost/2)
+          }
+        },
+      }),
+
+      new QueryAction({
+        name:'查询1106元订单物料',
+        url:'/app/noteItem/listNoteItem',
+        query:{
+          noteId:'${noteMap.1106}'
+        }
+
+      },{
+        buildVariable(result){
+          let content = result.result.content;
+          content = content.filter(row=>row.name=='狗肉')
+          return {
+            noteItemId:content[0].noteItemId
+          }
+        }
+      }),
+
+      new SplitNote({
+        noteId:'${noteMap.1106}'
+      }),
+
+      new ListNoteByQuery({
+        query:{
+          status:'normal',
+        },
+        checkNotes:[
+          {cost:300},
           {cost:500},
           {cost:806}
         ]

@@ -12,7 +12,7 @@ interface TestOpt{
 }
 function createParam(opt:TestOpt){
   return {
-      name:'提交订单',
+      name:'下单3个物料',
       url:'/app/note/createNote',
       method:'post',
       param: {
@@ -50,6 +50,9 @@ function createParam(opt:TestOpt){
       }
     }
 }
+/**
+ * 下单3个物料
+ */
 export default class extends HttpAction {
   private testOpt:TestOpt
   constructor(opt?:TestOpt) {
