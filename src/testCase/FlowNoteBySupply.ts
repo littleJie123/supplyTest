@@ -14,6 +14,7 @@ import ConfirmBill from "../action/bill/ConfirmBill";
 import SaveMaterial from "../action/material/SaveMaterial";
 import Fraction from "../util/Fraction";
 import NoteItemUtil from "../util/NoteItemUtil";
+import ProcessNote from "../action/note/ProcessNote";
 
 export default class extends TestCase {
   protected buildActions(): BaseTest[] {
@@ -381,7 +382,8 @@ export default class extends TestCase {
           return {
             
             cntAndPrices:NoteItemUtil.buildCntAndPrice(content),
-            linkNoteItemId:ArrayUtil.toArray(content,'linkNoteItemId')
+            linkNoteItemId:ArrayUtil.toArray(content,'linkNoteItemId'),
+            noteItems:content
           }
         }
       }),
@@ -394,10 +396,15 @@ export default class extends TestCase {
         url:'/app/noteItem/listNoteItem'
       },{
         check(result){
-          NoteItemUtil.checkCntAndPrice(result.content,variable.cntAndPrice,{"羊肉":500})
+          NoteItemUtil.checkCntAndPrice(result.result.content,variable.cntAndPrices,{"羊肉":500})
         }
       }),
 
+      new ProcessNote({
+        action:'accept',
+        noteId:'${noteId}',
+        noteItems:"${noteItems}"
+      })
 
 
 
