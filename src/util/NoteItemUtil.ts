@@ -3,9 +3,15 @@ import ICntAndPrice from "../inf/ICntAndPrice";
 import Fraction from "./Fraction";
 
 export default class {
-  static checkCntAndPrice(content: any[], cntAndPrices: any[], map: any) {
+  static checkCntAndPrice(content: any[], cntAndPrices: any[], map: any,cntCol:string,targetCol?:string) {
+    if(cntCol == null){
+      cntCol = 'purcharse'
+    }
+    if(targetCol == null){
+      targetCol = cntCol
+    }
     let self = this;
-    let myCnts = this.buildCntAndPrice(content);
+    let myCnts = this.buildCntAndPrice(content,targetCol);
     ArrayUtil.join({
       list: myCnts,
       list2: cntAndPrices,
@@ -36,16 +42,17 @@ export default class {
     return Math.abs(num1-num2)>0.000001
   }
 
-  static buildCntAndPrice(content: any[]): ICntAndPrice[] {
+  static buildCntAndPrice(content: any[],cntCol:string): ICntAndPrice[] {
     let retList: ICntAndPrice[] = []
     for (let row of content) {
-      retList.push(this.doBuildCntAndPrice(row))
+      retList.push(this.doBuildCntAndPrice(row,cntCol))
     }
     return retList;
   }
 
-  static doBuildCntAndPrice(row): ICntAndPrice {
-    let cnt = new Fraction(row.purcharse.buyUnitFee, 1).cal(row.purcharse.cnt);
+  static doBuildCntAndPrice(row,cntCol:string): ICntAndPrice {
+    let cntObj = row[cntCol ?? 'purcharse'];
+    let cnt = new Fraction(cntObj.buyUnitFee, 1).cal(cntObj.cnt);
     let price = new Fraction(1, row.stockBuyUnitFee).cal(row.price)
     return {
       name: row.name,
