@@ -1,10 +1,10 @@
-import { HttpAction } from "testflow";
+import { CheckUtil, HttpAction } from "testflow";
 import NoteItemUtil from "../../util/NoteItemUtil";
 interface TestOpt{
 
 }
 export default class extends HttpAction{
-  private testOpt:TestOpt;
+
   private materialId:number;
   private noteItemId:number;
   private noteItems:any[]
@@ -17,7 +17,6 @@ export default class extends HttpAction{
         warehouseGroupId:'${warehouse.warehouseGroupId}'
       }
     });
-    this.testOpt =opt;
   }
 
   protected parseHttpParam() {
@@ -54,6 +53,7 @@ export default class extends HttpAction{
   
 
   protected async checkResult(result: any): Promise<void> {
+    CheckUtil.expectEqual(result.result.content.length,2);
     let noteItems = result.result.content[0].noteItems;
     this.expectFind(noteItems,{
       materialId:this.materialId
