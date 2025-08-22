@@ -459,7 +459,8 @@ export default class extends TestCase {
       new CreateNote3M(),
       new SaveMaterial({
         name: '香肉',
-        buyUnit: [{ fee: 1, name: "包" }, { isSupplier: true, fee: 10, name: "盒" }]
+        buyUnit: [{ fee: 1, name: "包" }, { isSupplier: true, fee: 10, name: "盒" }],
+        remark:'香肉的品相'
       }, {
         warehouseType: 'supplierWarehouse'
       }),
@@ -529,6 +530,8 @@ export default class extends TestCase {
           }
         }
       }),
+
+      
       ... this.buildCheckNoteItem(null,{
         feeMap:{'羊肉':10},
         
@@ -549,6 +552,29 @@ export default class extends TestCase {
           }
         }
       }),
+      new QueryAction({
+        name:'验证对方物料品相',
+        url:'/app/material/getLinkMaterialInfo',
+        query:{
+          noteItemId:'${noteItems}'
+        }
+      },{
+        parseHttpParam(param){
+          let noteItemId:any[] = param.noteItemId;
+          let row = noteItemId.find(item=>item.name=='香肉')
+          return {
+            noteItemId:row.linkNoteItemId,
+            warehouseGroupId:param.warehouseGroupId
+          }
+        },
+        check(result){
+          result = result.result;
+          CheckUtil.expectEqualObj(result,{
+            name:'香肉',
+            remark:'香肉的品相'
+          })
+        }
+      }),
       ... this.buildInstockActions(),
 
       ... this.buildCheckNoteItem('instock',{
@@ -556,7 +582,9 @@ export default class extends TestCase {
         feeMap:{
           羊肉:10
         }
-      })
+      }),
+
+
     
     ]
   }

@@ -5,6 +5,7 @@ interface Opt{
   buyUnit?:any[]
   suppliers?:any[]
   name:string
+  remark?:string
 }
 function createParam(opt?:Opt,afterProcess?:IOpt): IHttpActionParam {
 
@@ -12,7 +13,9 @@ function createParam(opt?:Opt,afterProcess?:IOpt): IHttpActionParam {
     method:'POST',
     name:'增加商品：'+opt.name,
     url:'/app/material/SaveMaterial',
+   
     param: {
+      remark:opt.remark??'',
       "buyUnit": opt?.buyUnit ?? [
         { "isSupplier": true, "name": "箱", "fee": 1 }
       ],
