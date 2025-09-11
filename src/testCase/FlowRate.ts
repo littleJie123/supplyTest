@@ -25,7 +25,7 @@ export default class extends TestCase {
       }),
       new QueryAction({
         name: '查询打分',
-        url: '/app/rateRemark/listRateRemark',
+        url: '/app/rate/listRate',
         query: {
           tableId: '${noteMap.供应商1}',
           tableName: 'note',
@@ -52,7 +52,7 @@ export default class extends TestCase {
       }),
       new QueryAction({
         name: '查询打分',
-        url: '/app/rateRemark/listRateRemark',
+        url: '/app/rate/listRate',
         query: {
           tableId: '${noteMap.供应商1}',
           tableName: 'note',
@@ -66,7 +66,7 @@ export default class extends TestCase {
       }),
 
       new Action({
-        name: '不同用户打分',
+        name: ' 用户2 不同用户打分',
         url: '/app/note/setRate',
         param: {
           tableId: '${noteMap.供应商1}',
@@ -80,7 +80,7 @@ export default class extends TestCase {
       }),
       new QueryAction({
         name: '查询打分',
-        url: '/app/rateRemark/listRateRemark',
+        url: '/app/rate/listRate',
         query: {
           tableId: '${noteMap.供应商1}',
           tableName: 'note',
@@ -113,7 +113,7 @@ export default class extends TestCase {
         },
       }),
       new Action({
-        name: '不同状态打分',
+        name: '用户2 不同状态打分1',
         url: '/app/note/setRate',
         param: {
           tableId: '${noteMap.供应商1}',
@@ -126,24 +126,19 @@ export default class extends TestCase {
 
       }),
       new QueryAction({
-        name: '查询打分',
-        url: '/app/rateRemark/listRateRemark',
+        name: '查询打分1[用户2]',
+        url: '/app/rate/listRate',
         query: {
           tableId: '${noteMap.供应商1}',
           tableName: 'note',
+          usersId:2
         },
         checkers: {
-          len: 3,
+          len: 2,
           checkArray: [
-            { remark: '用户2-不同状态', rate: 3 }
+            { remark: '用户2-不同状态', rate: 3 },
+            {rate: 2 }
           ]
-        }
-      }, {
-        check(result) {
-          let content: any[] = result.result.content;
-          CheckUtil.expectNotFind(content, {
-            rate: 2
-          })
         }
       }),
       new Action({
@@ -152,7 +147,7 @@ export default class extends TestCase {
         param: {
           tableId: '${noteMap.供应商1}',
           tableName: 'note',
-          rate: 3,
+          rate: 4,
           remark: '用户2-不同状态2',
           rateType: 'statement',
           usersId: 2
@@ -162,7 +157,7 @@ export default class extends TestCase {
 
       new QueryAction({
         name: '查询打分',
-        url: '/app/rateRemark/listRateRemark',
+        url: '/app/rate/listRate',
         query: {
           tableId: '${noteMap.供应商1}',
           tableName: 'note',
@@ -170,7 +165,7 @@ export default class extends TestCase {
         checkers: {
           len: 4,
           checkArray: [
-            { remark: '用户2-不同状态2' },
+            { remark: '用户2-不同状态2',rate: 4 },
             { remark: '用户2-不同状态', rate: 3 }
           ]
         }
@@ -182,8 +177,8 @@ export default class extends TestCase {
         }
       }),
       new QueryAction({
-        name:'供应商查询评分',
-        url:'/app/rateRemark/listRateRemark',
+        name:'供应商查询评分1',
+        url:'/app/rate/listRate',
         query: {
           tableId: '${linkNoteId}',
           tableName: 'note',
@@ -213,8 +208,8 @@ export default class extends TestCase {
         warehouseType:'supplierWarehouse'
       }),
       new QueryAction({
-        name:'供应商查询评分',
-        url:'/app/rateRemark/listRateRemark',
+        name:'供应商查询评分2',
+        url:'/app/rate/listRate',
         query: {
           tableId: '${linkNoteId}',
           tableName: 'note',
@@ -313,7 +308,7 @@ export default class extends TestCase {
       }),
       new QueryAction({
         name:'验证评分',
-        url:'/app/rateRemark/listRateRemark',
+        url:'/app/rate/listRate',
         query:{
           tableId: '${linkNoteItemId}',
           tableName: 'noteItem',
@@ -324,6 +319,22 @@ export default class extends TestCase {
             {remark:'猪肉很好',rate:3},
             {remark:'猪肉很好2',rate:4},
             {remark:'供应商评分'}
+          ]
+        }
+      },{
+        warehouseType:'supplierWarehouse'
+      }),
+      new QueryAction({
+        name:'验证物料评分3.5',
+        url:'/app/noteItem/listNoteItem',
+        query:{
+          noteItemId: '${linkNoteItemId}'
+        },
+        checkers:{
+          len:1,
+          checkArray:[
+            {rate:3.5}
+           
           ]
         }
       },{

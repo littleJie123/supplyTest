@@ -9,7 +9,10 @@ import FindLastUserId from "../action/user/FindLastUserId";
 import GetOpenId from "../action/user/GetOpenId";
 import AddWarehouse from "../action/warehouse/AddWarehouse";
 import ListMaterial from "../action/material/ListMaterial";
-
+/**
+ * - 创建了 餐厅、供应商、物料  
+ * - 没有供应商账号和订单
+ */
 export default class extends TestCase {
   protected buildActions(): BaseTest[] {
     return [

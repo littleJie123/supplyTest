@@ -1,22 +1,28 @@
 import { ArrayUtil, BaseTest, TestCase } from "testflow";
-import PreTest from "./PreTest";
 import Action from "../action/Action";
 import ListMaterial from "../action/material/ListMaterial";
-import SaveMaterial from "../action/material/SaveMaterial";
 import CreateNote3M from "../action/note/CreateNote3M";
 import QueryAction from "../action/QueryAction";
 import SaveShareData from "../action/shareData/SaveShareData";
 import ChangeWarehouse from "../action/user/ChangeWarehouse";
 import AddWarehouse from "../action/warehouse/AddWarehouse";
-
+interface Opt{
+  supplierName?:string
+}
+/**
+ * 构建出订单和供应商 并且关联
+ */
 export default class extends TestCase {
-  getName(): string {
-    return '初始化餐厅|供应商|物料|订单'
+  private opt:Opt;
+  constructor(opt:Opt){
+    super();
+    this.opt = opt
   }
-
+  getSupplierName(){
+    return this.opt.supplierName ?? '供应商1'
+  }
   protected buildActions(): BaseTest[] {
     return [
-      new PreTest(),
       new ListMaterial(),
 
       new CreateNote3M(),
@@ -25,42 +31,6 @@ export default class extends TestCase {
         variableType: 'supplierWarehouse',
         type: 'supplier'
 
-      }),
-      new SaveMaterial({
-        name: '羊肉',
-        buyUnit: [
-          { "name": "克", "fee": 1 },
-          { "isSupplier": true, "name": "瓶", "fee": 500 }
-        ]
-      }, {
-        warehouseType: 'supplierWarehouse'
-      }),
-      new SaveMaterial({
-        name: '兔肉',
-        buyUnit: [
-          { "name": "克", "fee": 1 },
-          { "isSupplier": true, "name": "瓶", "fee": 500 }
-        ]
-      }, {
-        warehouseType: 'supplierWarehouse'
-      }),
-      new SaveMaterial({
-        name: '鸡肉',
-        buyUnit: [
-          { "name": "克", "fee": 1 },
-          { "isSupplier": true, "name": "瓶", "fee": 500 }
-        ]
-      }, {
-        warehouseType: 'supplierWarehouse'
-      }),
-      new SaveMaterial({
-        name: '鸭肉',
-        buyUnit: [
-          { "name": "克", "fee": 1 },
-          { "isSupplier": true, "name": "瓶", "fee": 500 }
-        ]
-      }, {
-        warehouseType: 'supplierWarehouse'
       }),
       new QueryAction({
         name: '查询订单',
@@ -77,7 +47,7 @@ export default class extends TestCase {
       }),
       new SaveShareData({
         data: {
-          noteId: "${noteMap.供应商1}"
+          noteId: `\${noteMap.${this.getSupplierName()}}`
         }
       }),
       new Action({
@@ -99,7 +69,12 @@ export default class extends TestCase {
 
       }, {
         warehouseType: 'supplierWarehouse'
-      }),
+      })
+
     ]
   }
+  getName(): string {
+    return '发单&供应商接单';
+  }
+
 }

@@ -584,6 +584,8 @@ export default class extends TestCase {
         }
       }),
 
+      new ListMaterial(),
+      new CreateNote3M()
 
     
     ]
@@ -684,7 +686,9 @@ export default class extends TestCase {
             }
           }
         }
-      }),
+      })
+
+      
     ]
   }
   getName(): string {
