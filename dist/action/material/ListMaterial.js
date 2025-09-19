@@ -6,13 +6,15 @@ const testflow_1 = require("testflow");
  */
 class default_1 extends testflow_1.HttpAction {
     constructor(opt) {
+        var _a;
+        let warehouseType = (_a = opt === null || opt === void 0 ? void 0 : opt.type) !== null && _a !== void 0 ? _a : 'warehouse';
         super({
             name: '获取商品',
             url: '/app/material/listMaterialByCategory',
             method: 'POST',
             param: {
-                warehouseGroupId: '${warehouse.warehouseGroupId}',
-                warehouseId: '${warehouse.warehouseId}'
+                warehouseGroupId: `\${${warehouseType}.warehouseGroupId}`,
+                warehouseId: `\${${warehouseType}.warehouseId}`
             }
         });
         this.testOpt = opt;

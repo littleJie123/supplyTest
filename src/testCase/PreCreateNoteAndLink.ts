@@ -6,6 +6,8 @@ import QueryAction from "../action/QueryAction";
 import SaveShareData from "../action/shareData/SaveShareData";
 import ChangeWarehouse from "../action/user/ChangeWarehouse";
 import AddWarehouse from "../action/warehouse/AddWarehouse";
+import AddSupplier from "../action/supplier/AddSupplier";
+import AddMaterial from "../action/material/AddMaterial";
 interface Opt{
   supplierName?:string
 }
@@ -14,12 +16,12 @@ interface Opt{
  */
 export default class extends TestCase {
   private opt:Opt;
-  constructor(opt:Opt){
+  constructor(opt?:Opt){
     super();
     this.opt = opt
   }
   getSupplierName(){
-    return this.opt.supplierName ?? '供应商1'
+    return this.opt?.supplierName ?? '供应商1'
   }
   protected buildActions(): BaseTest[] {
     return [
@@ -31,6 +33,13 @@ export default class extends TestCase {
         variableType: 'supplierWarehouse',
         type: 'supplier'
 
+      }),
+      new AddMaterial('羊肉',{
+        type:'supplierWarehouse',
+        buyUnit:[
+          {  "name": "克", "fee": 1 },
+          { "isSupplier": true, "name": "瓶", "fee": 500 }
+        ]
       }),
       new QueryAction({
         name: '查询订单',

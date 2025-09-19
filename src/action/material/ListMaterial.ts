@@ -1,7 +1,9 @@
 import { HttpAction } from "testflow";
+import { WarehouseType } from "../../inf/IOpt";
 
 interface Opt {
   hasPurcharse?:number
+  type?:WarehouseType
 }
 /**
  * 查询出物料，并且把物料放到materialMap中
@@ -10,13 +12,14 @@ export default class extends HttpAction{
   private testOpt:Opt
 
   constructor(opt?:Opt){
+    let warehouseType = opt?.type ?? 'warehouse'
     super({
       name:'获取商品',
       url:'/app/material/listMaterialByCategory',
       method:'POST',
       param:{
-        warehouseGroupId:'${warehouse.warehouseGroupId}',
-        warehouseId:'${warehouse.warehouseId}'
+        warehouseGroupId:`\${${warehouseType}.warehouseGroupId}`,
+        warehouseId:`\${${warehouseType}.warehouseId}`
       }
     })
     this.testOpt = opt;

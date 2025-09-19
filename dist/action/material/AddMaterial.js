@@ -20,10 +20,25 @@ function createParam(name, opt) {
             ],
             "img": [],
             "name": name,
-            "warehouseId": "${warehouse.warehouseId}",
-            "warehouseGroupId": "${warehouse.warehouseGroupId}"
+            ...getWarehouse(opt)
         }
     };
+}
+function getWarehouse(opt) {
+    var _a;
+    let type = (_a = opt === null || opt === void 0 ? void 0 : opt.type) !== null && _a !== void 0 ? _a : 'warehouse';
+    if (type === 'warehouse') {
+        return {
+            "warehouseId": "${warehouse.warehouseId}",
+            "warehouseGroupId": "${warehouse.warehouseGroupId}"
+        };
+    }
+    else if (type === 'supplierWarehouse') {
+        return {
+            "warehouseId": "${supplierWarehouse.warehouseId}",
+            "warehouseGroupId": "${supplierWarehouse.warehouseGroupId}"
+        };
+    }
 }
 class default_1 extends testflow_1.HttpAction {
     constructor(name, opt) {

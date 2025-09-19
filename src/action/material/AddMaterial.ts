@@ -1,7 +1,9 @@
 import { HttpAction, IHttpActionParam } from "testflow";
+import { WarehouseType } from "../../inf/IOpt";
 interface Opt{
   buyUnit?:any[]
   suppliers?:any[]
+  type?:WarehouseType
 }
 function createParam(name: string,opt?:Opt): IHttpActionParam {
 
@@ -22,11 +24,24 @@ function createParam(name: string,opt?:Opt): IHttpActionParam {
         }],
       "img": [],
       "name": name,
-      "warehouseId": "${warehouse.warehouseId}",
-      "warehouseGroupId": "${warehouse.warehouseGroupId}"
+      ... getWarehouse(opt)
     }
   }
 
+}
+function getWarehouse(opt?:Opt){
+  let type = opt?.type ?? 'warehouse';
+  if(type === 'warehouse'){
+    return {
+      "warehouseId": "${warehouse.warehouseId}",
+      "warehouseGroupId": "${warehouse.warehouseGroupId}"
+    }
+  }else if(type === 'supplierWarehouse'){
+    return {
+      "warehouseId": "${supplierWarehouse.warehouseId}",
+      "warehouseGroupId": "${supplierWarehouse.warehouseGroupId}"
+    }
+  }
 }
 
 export default class extends HttpAction {

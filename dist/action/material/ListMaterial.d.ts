@@ -1,6 +1,8 @@
 import { HttpAction } from "testflow";
+import { WarehouseType } from "../../inf/IOpt";
 interface Opt {
     hasPurcharse?: number;
+    type?: WarehouseType;
 }
 /**
  * 查询出物料，并且把物料放到materialMap中
