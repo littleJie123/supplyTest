@@ -9,11 +9,6 @@ const runner = testflow_1.TestRunner.get();
 runner.regEnvConfig('local', {
     host: 'http://127.0.0.1:8080/'
 });
-let testId = null;
-if (process.argv.length > 2) {
-    testId = process.argv[2];
-}
 runner.start({
     testPath: path_1.default.join(__dirname, './testCase'),
-    testId: testId
 });

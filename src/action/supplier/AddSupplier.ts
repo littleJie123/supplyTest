@@ -1,8 +1,11 @@
 import { HttpAction,IHttpActionParam } from "testflow"; 
 
+interface Opt{
+  type?:string
+}
 export default class AddSupplier extends HttpAction {
   private name:string;
-  constructor(name){
+  constructor(name,opt?:Opt){
     
     super({
       name:'增加卖家:'+name,
@@ -10,7 +13,8 @@ export default class AddSupplier extends HttpAction {
       url:'/app/supplier/addsupplier',
       param:{
         "name":name,
-        "warehouseGroupId":"${warehouse.warehouseGroupId}"
+        "warehouseGroupId":"${warehouse.warehouseGroupId}",
+        type:opt?.type ?? 'supplier'
       }
     })
     this.name = name;

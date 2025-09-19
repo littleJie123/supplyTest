@@ -1,6 +1,7 @@
 import { HttpAction, IHttpActionParam } from "testflow";
 interface Opt{
   buyUnit?:any[]
+  suppliers?:any[]
 }
 
 function createParam(name:string,opt?:Opt): IHttpActionParam {
@@ -15,7 +16,7 @@ function createParam(name:string,opt?:Opt): IHttpActionParam {
       "buyUnit": opt?.buyUnit ?? [
         {  "name": "g", isSupplier:true },{  "name": "瓶", fee:500 }
       ],
-      "suppliers": [
+      "suppliers": opt?.suppliers ?? [
         {
           "isDef": true,
           "supplierId": "${supplierMap.供应商1}",
