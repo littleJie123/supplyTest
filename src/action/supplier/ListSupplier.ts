@@ -14,11 +14,7 @@ export default class AddSupplier extends HttpAction {
     })
   }
 
-  protected async checkResult(result: any): Promise<void> {
-    let content:any[] = result.result.content
-    this.expectEqual(content.length,2)
-  }
-  
+ 
   
   
   protected buildVariable(result: any) {

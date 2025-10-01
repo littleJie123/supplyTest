@@ -8,7 +8,9 @@ interface TestOpt{
   /**
    * 不要创建变量
    */
-  noBuildSupplier?:boolean
+  noBuildSupplier?:boolean;
+
+  supplier?:string;
 }
 function createParam(opt:TestOpt){
   return {
@@ -19,7 +21,7 @@ function createParam(opt:TestOpt){
         "items": opt?.items ?? [
           {
             "materialId": '${materialMap.牛肉.materialId}',
-            "supplierId": '${supplierMap.供应商2}',
+            "supplierId": opt.supplier ?? '${supplierMap.供应商2}',
             "cnt": 50,
             "buyUnitFee": 1,
             "stockUnitsId": 18,
@@ -28,7 +30,7 @@ function createParam(opt:TestOpt){
           },
           {
             "materialId": '${materialMap.猪肉.materialId}',
-            "supplierId": '${supplierMap.供应商1}',
+            "supplierId": opt.supplier ?? '${supplierMap.供应商1}',
             "cnt": 400,
             "buyUnitFee": 1,
             "stockUnitsId": 5,
@@ -37,7 +39,7 @@ function createParam(opt:TestOpt){
           },
           {
             "materialId": '${materialMap.羊肉.materialId}',
-            "supplierId": '${supplierMap.供应商1}',
+            "supplierId":  opt.supplier ?? '${supplierMap.供应商1}',
             "cnt": 30,
             "buyUnitFee": 500,
             "stockUnitsId": 29,
