@@ -3,6 +3,14 @@ import ICntAndPrice from "../inf/ICntAndPrice";
 import Fraction from "./Fraction";
 
 export default class {
+  /**
+   * 检查结果和值对不对
+   * @param content 
+   * @param cntAndPrices 
+   * @param map 
+   * @param cntCol 
+   * @param targetCol 
+   */
   static checkCntAndPrice(content: any[], cntAndPrices: any[], map: any,cntCol:string,targetCol?:string) {
     if(cntCol == null){
       cntCol = 'purcharse'
@@ -11,7 +19,7 @@ export default class {
       targetCol = cntCol
     }
     let self = this;
-    let myCnts = this.buildCntAndPrice(content,targetCol);
+    let myCnts = this.buildCntAndPrice(content,targetCol,'linkPrice');
     ArrayUtil.join({
       list: myCnts,
       list2: cntAndPrices,
@@ -42,18 +50,38 @@ export default class {
     return Math.abs(num1-num2)>0.000001
   }
 
-  static buildCntAndPrice(content: any[],cntCol:string): ICntAndPrice[] {
+  /**
+   * 创建出价格和数量
+   * @param content 
+   * @param cntCol 
+   * @returns 
+   */
+  static buildCntAndPrice(content: any[],cntCol:string,priceCol?:string): ICntAndPrice[] {
     let retList: ICntAndPrice[] = []
     for (let row of content) {
-      retList.push(this.doBuildCntAndPrice(row,cntCol))
+      retList.push(this.doBuildCntAndPrice(row,cntCol,priceCol))
     }
     return retList;
   }
 
-  static doBuildCntAndPrice(row,cntCol:string): ICntAndPrice {
+  /**
+   * 转化成标准单位的价格和数量
+   * @param row 
+   * @param cntCol 
+   * @param priceCol 
+   * @returns 
+   */
+  private static doBuildCntAndPrice(row,cntCol:string,priceCol:string): ICntAndPrice {
     let cntObj = row[cntCol ?? 'purcharse'];
+    let priceObj = row;
+    if(priceCol != null && row[priceCol]!=null){
+      priceObj = row[priceCol]
+    }
+    let priceValue = priceObj.price;
+    let stockBuyUnitFee = row.stockBuyUnitFee ?? row.buyUnitFee;
+
     let cnt = new Fraction(cntObj.buyUnitFee, 1).cal(cntObj.cnt);
-    let price = new Fraction(1, row.stockBuyUnitFee).cal(row.price)
+    let price = new Fraction(1, stockBuyUnitFee).cal(priceValue)
     return {
       name: row.name,
       cnt,
