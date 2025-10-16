@@ -9,7 +9,7 @@ export default class extends TestCase {
   protected buildActions(): BaseTest[] {
     return [
       new PreTest,
-      new PreCreateNoteAndLink(),
+      ... new PreCreateNoteAndLink().getActions(),
       new Action({
         name: '批量新建物料',
         url: '/app/material/batchAdd',
@@ -51,7 +51,7 @@ export default class extends TestCase {
       new QueryAction({
         url: '/app/note/listNote',
         query: {
-          status: "normal",
+          status: "accept",
           warehouseId: '${warehouse.warehouseId}',
         }
       }, {
@@ -217,7 +217,7 @@ export default class extends TestCase {
     return param;
   }
   getName(): string {
-    return '供应商创建订单'
+    return '供应商创建订单[纯测试数据]'
   }
 
 }

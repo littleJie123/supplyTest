@@ -23,11 +23,17 @@ export default class extends TestCase {
   getSupplierName(){
     return this.opt?.supplierName ?? '供应商1'
   }
+
+  needInScreen(): boolean {
+    return false;
+  }
   protected buildActions(): BaseTest[] {
     return [
       new ListMaterial(),
 
       new CreateNote3M(),
+
+      
       new AddWarehouse({
         name: '新供应商',
         variableType: 'supplierWarehouse',

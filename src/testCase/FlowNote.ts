@@ -121,8 +121,8 @@ export default class extends TestCase {
       }),
 
       // 第三页面处理
-      new CreateNote3M(),
-      new CreateNote3M({
+      ... new CreateNote3M().getActions(),
+      ... new CreateNote3M({
         noBuildSupplier: true,
         items: [
           {
@@ -159,8 +159,8 @@ export default class extends TestCase {
             cost: 1146
           }
         ]
-      }),
-      new CreateNote3M({
+      }).getActions(),
+      ... new CreateNote3M({
         noBuildSupplier: true,
         items: [
           {
@@ -197,7 +197,7 @@ export default class extends TestCase {
             cost: 1146
           }
         ]
-      }),
+      }).getActions(),
       new ListNoteGroup({
         groupType: 'NoteDay',
         len: 1,

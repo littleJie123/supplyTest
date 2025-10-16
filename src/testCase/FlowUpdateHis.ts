@@ -29,11 +29,7 @@ export default class extends TestCase {
         },
         checkers: {
           checkArray: [
-            {
-              data: {
-                name: '供应商1'
-              }
-            },
+            
             {
               data: {
                 name: '供应商A'

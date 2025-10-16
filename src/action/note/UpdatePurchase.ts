@@ -32,6 +32,7 @@ export default class extends HttpAction {
   }
 
   protected async checkResult(result: any): Promise<void> {
+    this.checkHttpStatus(result);
     this.expectEqual(result.result.cost,670)
   }
 }
