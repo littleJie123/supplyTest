@@ -12,6 +12,7 @@ interface Opt{
   supplierName?:string
 }
 /**
+ * warehouseType = supplierWarehouse 为供应商
  * 构建出订单和供应商 并且关联
  */
 export default class extends TestCase {
@@ -45,7 +46,8 @@ export default class extends TestCase {
         buyUnit:[
           {  "name": "克", "fee": 1 },
           { "isSupplier": true, "name": "瓶", "fee": 500 }
-        ]
+        ],
+        suppliers:[]
       }),
       new QueryAction({
         name: '查询订单',

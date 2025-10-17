@@ -15,6 +15,7 @@ import SaveMaterial from "../action/material/SaveMaterial";
 import Fraction from "../util/Fraction";
 import NoteItemUtil from "../util/NoteItemUtil";
 import ProcessNote from "../action/note/ProcessNote";
+import CheckerMaterialLink from "../action/CheckerMaterialLink";
 interface CheckOpt {
   checkItems?(item: any);
   checkSupplierItems?(item: any);
@@ -585,8 +586,8 @@ export default class extends TestCase {
       }),
 
       new ListMaterial(),
-      new CreateNote3M()
-
+      new CreateNote3M(),
+      new CheckerMaterialLink()
     
     ]
   }

@@ -4,6 +4,7 @@ import Action from "../action/Action";
 import PreTest from "./PreTest";
 import ListMaterial from "../action/material/ListMaterial";
 import QueryAction from "../action/QueryAction";
+import CheckerMaterialLink from "../action/CheckerMaterialLink";
 
 export default class extends TestCase {
   protected buildActions(): BaseTest[] {
@@ -94,7 +95,8 @@ export default class extends TestCase {
             }
           ]
         }
-      })
+      }),
+      new CheckerMaterialLink()
 
 
 
