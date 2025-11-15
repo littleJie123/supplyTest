@@ -1,15 +1,18 @@
 import { HttpAction,IHttpActionParam } from "testflow"; 
-
+import { WarehouseType } from "../../inf/IOpt";
+interface Opt{
+  warehouseType:WarehouseType
+}
 export default class AddSupplier extends HttpAction {
-;
-  constructor(){
+
+  constructor(opt?:Opt){
     
     super({
       name:'查询供应商',
       method:'POST',
       url:'/app/supplier/listsupplier',
       param:{
-        "warehouseGroupId":"${warehouse.warehouseGroupId}"
+        "warehouseGroupId":`\${${opt?.warehouseType ?? 'warehouse'}.warehouseGroupId}`
       }
     })
   }

@@ -1,7 +1,9 @@
 import { HttpAction,IHttpActionParam } from "testflow"; 
+import { WarehouseType } from "../../inf/IOpt";
 
 interface Opt{
-  type?:string
+  type?:string;
+  warehouseType?:WarehouseType;
 }
 export default class AddSupplier extends HttpAction {
   private name:string;
@@ -13,7 +15,7 @@ export default class AddSupplier extends HttpAction {
       url:'/app/supplier/addsupplier',
       param:{
         "name":name,
-        "warehouseGroupId":"${warehouse.warehouseGroupId}",
+        "warehouseGroupId":`\${${opt?.warehouseType ?? 'warehouse'}.warehouseGroupId}`,
         type:opt?.type ?? 'supplier'
       }
     })

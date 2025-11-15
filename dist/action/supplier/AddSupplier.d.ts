@@ -1,6 +1,8 @@
 import { HttpAction } from "testflow";
+import { WarehouseType } from "../../inf/IOpt";
 interface Opt {
     type?: string;
+    warehouseType?: WarehouseType;
 }
 export default class AddSupplier extends HttpAction {
     private name;

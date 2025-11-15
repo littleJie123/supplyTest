@@ -7,7 +7,6 @@ import UpdatePurchase from "../action/note/UpdatePurchase";
 import PreTest from "./PreTest";
 import ListNoteItem from "../action/noteItem/ListNoteItem";
 import BatchProcessNote from "../action/note/BatchProcessNote";
-import ConfirmBill from "../action/bill/ConfirmBill";
 import ListNoteFromGroup from "../action/note/ListNoteFromGroup";
 import BatchProcessByNoteId from "../action/note/BatchProcessByNoteId";
 import CreateBillAllNotes from "../action/bill/CreateBillAllNotes";
@@ -66,7 +65,7 @@ export default class extends TestCase {
       new BatchProcessNote({
         action: 'statement'
       }),
-      new ConfirmBill(),
+
       new ListNoteGroup({
         groupType: 'NoteDay',
         status: 'statement',
@@ -112,7 +111,7 @@ export default class extends TestCase {
           { instockCost: 846 }
         ]
       }),
-      new ConfirmBill(),
+
       new ListNoteGroup({
         groupType: 'NoteDay',
         status: 'statement',

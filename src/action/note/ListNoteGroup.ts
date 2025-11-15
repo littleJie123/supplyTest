@@ -28,12 +28,14 @@ function create(opt:Opt,afterProcess?:IOpt):IHttpActionParam{
 }
 export default class extends HttpAction{
   private testOpt:Opt;
+  private warehouseType:WarehouseType
   constructor(opt?:Opt,afterProcess?:IOpt){
     if(opt == null){
       opt = {};
     }
     super(create(opt,afterProcess))
     this.testOpt = opt;
+    this.warehouseType = afterProcess?.warehouseType
   }
 
   protected async checkResult(result: any): Promise<void> {
@@ -46,13 +48,26 @@ export default class extends HttpAction{
     }
   }
 
+  protected getType():string{
+    let opt = this.testOpt;
+    let type =  opt?.type ;
+    if(type == null){
+      if(this.warehouseType == 'supplierWarehouse'){
+        type = 'Type4Supplier';
+      }else{
+        type = 'Type4Store';
+      }
+      return type;
+    }
+  }
+
   protected buildVariable(result: any) {
     let row = result.result.content[0]
     let opt = this.testOpt;
     return {
       noteGroup:{
         groupType:getGroupType(opt),
-        type:opt?.type ?? 'Type4Store',
+        type:this.getType(),
         status:opt?.status ?? 'normal',
         day:row.sysAddTime
       }

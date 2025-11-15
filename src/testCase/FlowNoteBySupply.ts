@@ -10,7 +10,6 @@ import Action from "../action/Action";
 import ChangeWarehouse from "../action/user/ChangeWarehouse";
 import ListNoteGroup from "../action/note/ListNoteGroup";
 import BatchProcessNote from "../action/note/BatchProcessNote";
-import ConfirmBill from "../action/bill/ConfirmBill";
 import SaveMaterial from "../action/material/SaveMaterial";
 import Fraction from "../util/Fraction";
 import NoteItemUtil from "../util/NoteItemUtil";
@@ -240,10 +239,35 @@ export default class extends TestCase {
       }, {
         warehouseType: 'supplierWarehouse',
       }),
-      new ConfirmBill({
-        warehouseType: 'supplierWarehouse',
 
+      new Action({
+        url:'/free/query',
+        name:'检查数据库',
+        param:{
+          array:[
+            {
+              query:{
+                warehouseId:'${warehouse.warehouseId}',
+              },
+              table:'noteItem'
+            },
+            {
+              query:{
+                warehouseId:'${warehouse.warehouseId}',
+              },
+              table:'note'
+            }
+          ]
+        }
+      },{
+        check(result){
+          result = result.result;
+          let note:any[] = result.note;
+          note = note.filter(row=>row.linkStatementCost>0);
+          CheckUtil.expectEqual(note.length>0,true);
+        }
       }),
+      
       new ListNoteGroup({
         groupType: 'NoteDay',
         status: 'statement',

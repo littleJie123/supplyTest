@@ -14,11 +14,24 @@ interface TestOpt {
 
   supplier?: string;
 
+  /**
+   * 价格比例
+   */
+  priceFee?:number
+
   sendNote?: {
     status?: 'normal' | 'accept'
   }
+  /**
+   * 不要检查
+   */
+  notCheck?:boolean;
+
+  cntMap?:any
 }
 function createParam(opt: TestOpt) {
+  let priceFee = opt.priceFee ?? 1;
+  let cntMap = opt.cntMap;
   return {
     name: '下单3个物料',
     url: '/app/note/createNote',
@@ -28,28 +41,28 @@ function createParam(opt: TestOpt) {
         {
           "materialId": '${materialMap.牛肉.materialId}',
           "supplierId": opt.supplier ?? '${supplierMap.供应商2}',
-          "cnt": 50,
+          "cnt":cntMap?.牛肉 ?? 50 ,
           "buyUnitFee": 1,
           "stockUnitsId": 18,
-          "price": 10,
+          "price": 10*priceFee,
           "stockBuyUnitFee": 1
         },
         {
           "materialId": '${materialMap.猪肉.materialId}',
           "supplierId": opt.supplier ?? '${supplierMap.供应商1}',
-          "cnt": 400,
+          "cnt": cntMap?.猪肉 ?? 400,
           "buyUnitFee": 1,
           "stockUnitsId": 5,
-          "price": 21,
+          "price": 21*priceFee,
           "stockBuyUnitFee": -10
         },
         {
           "materialId": '${materialMap.羊肉.materialId}',
           "supplierId": opt.supplier ?? '${supplierMap.供应商1}',
-          "cnt": 30,
+          "cnt": cntMap?.羊肉 ?? 30,
           "buyUnitFee": 500,
           "stockUnitsId": 29,
-          "price": 0.2,
+          "price": 0.2*priceFee,
           "stockBuyUnitFee": 500
         }
       ],
@@ -134,10 +147,12 @@ class CreateNote extends HttpAction {
 
   protected async checkResult(result: any): Promise<void> {
     let content: any[] = result.result;
-    let notes: any[] = this.getCheckNotes()
-    if (notes != null) {
-      for (let note of notes) {
-        this.expectFind(content, note)
+    if(!this.testOpt.notCheck){
+      let notes: any[] = this.getCheckNotes()
+      if (notes != null) {
+        for (let note of notes) {
+          this.expectFind(content, note)
+        }
       }
     }
 
