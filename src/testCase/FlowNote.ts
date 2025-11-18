@@ -104,12 +104,13 @@ export default class extends TestCase {
           { cost: 500 }
         ]
       }),
-      new CreateBillAllNotes({
-        len: 2,
-        bills: [
-          { instockCost: 500 },
-          { instockCost: 846 }
-        ]
+      new BatchProcessByNoteId({
+        index: 0,
+        action:'statement'
+      }),
+      new BatchProcessByNoteId({
+        index: 1,
+        action:'statement'
       }),
 
       new ListNoteGroup({

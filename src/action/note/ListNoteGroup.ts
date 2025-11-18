@@ -57,13 +57,15 @@ export default class extends HttpAction{
       }else{
         type = 'Type4Store';
       }
-      return type;
+      
     }
+    return type;
   }
 
   protected buildVariable(result: any) {
     let row = result.result.content[0]
     let opt = this.testOpt;
+    console.log('this.getType()',this.getType());
     return {
       noteGroup:{
         groupType:getGroupType(opt),

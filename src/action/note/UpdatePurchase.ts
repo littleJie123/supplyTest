@@ -15,7 +15,8 @@ export default class extends HttpAction {
             "buyUnitFee": 1,
             "stockUnitsId": 18,
             "price": 21,
-            "stockBuyUnitFee": -10
+            "stockBuyUnitFee": -10,
+            "materialId":"${noteItem.0.materialId}"
           },
           {
             "noteItemId": "${noteItem.1.noteItemId}",
@@ -23,7 +24,8 @@ export default class extends HttpAction {
             "buyUnitFee": 500,
             "stockUnitsId": 29,
             "price": 2,
-            "stockBuyUnitFee": 500
+            "stockBuyUnitFee": 500,
+            "materialId":"${noteItem.1.materialId}"
           }
         ],
         "warehouseGroupId":'${warehouse.warehouseGroupId}'

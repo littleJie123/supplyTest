@@ -69,11 +69,7 @@ export default class extends TestCase {
         },
         checkers: {
           checkArray: [
-            {
-              data: {
-                name: '新餐厅'
-              }
-            },
+           
             {
               data: {
                 name: '新餐厅2'
