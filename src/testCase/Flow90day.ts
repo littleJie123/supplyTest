@@ -39,7 +39,7 @@ export default class extends TestCase {
 
   buildState() {
     let date = DateUtil.beforeDay(new Date(), S_DayCnt)
-    let end = DateUtil.beforeDay(new Date(), 0)
+    let end = DateUtil.beforeDay(new Date(), 1)
     return [new Action({
       url: '/app/state/stateWarehouse',
       name: '正式统计',
@@ -97,7 +97,7 @@ export default class extends TestCase {
   private buildDay(day: number): BaseTest[] {
     let ret: BaseTest[] = []
     ret.push(... this.buildNote(day))
-    if (day % 30 == 0 && day != S_NoteCnt) {
+    if (day % 5 == 0 && day != S_NoteCnt) {
       ret.push(... this.buildInventory(day));
     } else if (day % 15 == 0) {
       ret.push(... this.buildBack(day));
@@ -174,6 +174,7 @@ export default class extends TestCase {
   private buildInventory(day: number): BaseTest[] {
     let ret: BaseTest[] = [];
     let array: any = []
+    let inventoryDay = DateUtil.beforeDay(new Date(), day)
     for (let i = 0; i < S_MaterialCnt; i++) {
       let name = this.buildName(i);
       array.push({
@@ -192,6 +193,23 @@ export default class extends TestCase {
           warehouseId: '${warehouse.warehouseId}',
           warehouseGroupId: '${warehouse.warehouseGroupId}'
         }
+      }
+    }))
+
+    ret.push(new Action({
+      url: '/free/add',
+      name: '增加盘点记录',
+      param: {
+        table: 'inventory',
+        array: array.map(row => ({
+          materialId: row.materialId,
+          cnt: row.cnt,
+          status: 'finished',
+          buyUnitFee: row.buyUnitFee,
+          inventoryDay: DateUtil.format(inventoryDay),
+          warehouseId: '${warehouse.warehouseId}',
+          warehouseGroupId: '${warehouse.warehouseGroupId}'
+        }))
       }
     }))
     return ret;
@@ -229,7 +247,7 @@ export default class extends TestCase {
 
   private buildUpdateStock(day: number): BaseTest[] {
     let ret: BaseTest[] = [];
-    let tables: string[] = ['stock', 'stockRecord', 'note', 'noteItem'];
+    let tables: string[] = ['stock', 'stockRecord', 'note', 'noteItem', 'inventory'];
 
     let date = DateUtil.beforeDay(new Date(), day);
 
