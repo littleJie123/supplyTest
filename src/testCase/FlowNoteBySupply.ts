@@ -19,7 +19,7 @@ interface CheckOpt {
   checkItems?(item: any);
   checkSupplierItems?(item: any);
   targetCol?: string
-  feeMap?:any;
+  feeMap?: any;
 }
 export default class extends TestCase {
   protected buildActions(): BaseTest[] {
@@ -82,11 +82,11 @@ export default class extends TestCase {
       }),
       new ChangeWarehouse(),
       new Action({
-        url: '/share/linkNote',
+        url: '/app/note/linkNote',
         name: '接单',
         param: {
           warehouseId: "${supplierWarehouse.warehouseId}",
-          shareDataNo: "${shareDataNo}",
+          _shareDataNo: "${shareDataNo}",
         }
 
       }, {
@@ -241,33 +241,33 @@ export default class extends TestCase {
       }),
 
       new Action({
-        url:'/free/query',
-        name:'检查数据库',
-        param:{
-          array:[
+        url: '/free/query',
+        name: '检查数据库',
+        param: {
+          array: [
             {
-              query:{
-                warehouseId:'${warehouse.warehouseId}',
+              query: {
+                warehouseId: '${warehouse.warehouseId}',
               },
-              table:'noteItem'
+              table: 'noteItem'
             },
             {
-              query:{
-                warehouseId:'${warehouse.warehouseId}',
+              query: {
+                warehouseId: '${warehouse.warehouseId}',
               },
-              table:'note'
+              table: 'note'
             }
           ]
         }
-      },{
-        check(result){
+      }, {
+        check(result) {
           result = result.result;
-          let note:any[] = result.note;
-          note = note.filter(row=>row.linkStatementCost>0);
-          CheckUtil.expectEqual(note.length>0,true);
+          let note: any[] = result.note;
+          note = note.filter(row => row.linkStatementCost > 0);
+          CheckUtil.expectEqual(note.length > 0, true);
         }
       }),
-      
+
       new ListNoteGroup({
         groupType: 'NoteDay',
         status: 'statement',
@@ -485,7 +485,7 @@ export default class extends TestCase {
       new SaveMaterial({
         name: '香肉',
         buyUnit: [{ fee: 1, name: "包" }, { isSupplier: true, fee: 10, name: "盒" }],
-        remark:'香肉的品相'
+        remark: '香肉的品相'
       }, {
         warehouseType: 'supplierWarehouse'
       }),
@@ -502,22 +502,22 @@ export default class extends TestCase {
       }, {
         warehouseType: 'supplierWarehouse',
         buildVariable(result) {
-          let content:any[] = result.result.content;
-          let material = content.filter(row=>['羊肉','香肉'].includes(row.name));
+          let content: any[] = result.result.content;
+          let material = content.filter(row => ['羊肉', '香肉'].includes(row.name));
           return {
-            materialId:ArrayUtil.toArray(material,'materialId'),
+            materialId: ArrayUtil.toArray(material, 'materialId'),
             materials: ArrayUtil.toMapByKey(content, 'name')
           }
         },
       }),
       new QueryAction({
         name: '查询物料合并信息',
-        url:'/app/materialLink/getCombineInfo',
-        query:{
-          materialId:"${materialId}"
+        url: '/app/materialLink/getCombineInfo',
+        query: {
+          materialId: "${materialId}"
         }
-      },{
-        warehouseType:'supplierWarehouse'
+      }, {
+        warehouseType: 'supplierWarehouse'
       }),
       new Action({
         name: '合并物料',
@@ -535,88 +535,88 @@ export default class extends TestCase {
             "buyUnitFee": -10,
             "stocksUnitId": 21
           }
-         
+
         }
 
       }, {
         warehouseType: 'supplierWarehouse'
       }),
       new QueryAction({
-        name:'查询订单',
-        url:'/app/note/listNote',
-        query:{
-          status:'normal'
+        name: '查询订单',
+        url: '/app/note/listNote',
+        query: {
+          status: 'normal'
         }
-      },{
-        warehouseType:'supplierWarehouse',
-        buildVariable(result){
+      }, {
+        warehouseType: 'supplierWarehouse',
+        buildVariable(result) {
           return {
-            noteId:result.result.content[0].noteId
+            noteId: result.result.content[0].noteId
           }
         }
       }),
 
-      
-      ... this.buildCheckNoteItem(null,{
-        feeMap:{'羊肉':10},
-        
+
+      ... this.buildCheckNoteItem(null, {
+        feeMap: { '羊肉': 10 },
+
       }),
       new QueryAction({
-        name:'查询订单物料',
-        url:'/app/noteItem/listNoteItem',
-        query:{
-          noteId:'${noteId}'
+        name: '查询订单物料',
+        url: '/app/noteItem/listNoteItem',
+        query: {
+          noteId: '${noteId}'
         },
-        
-      },{
-        warehouseType:'supplierWarehouse',
-        buildVariable(result){
-           
+
+      }, {
+        warehouseType: 'supplierWarehouse',
+        buildVariable(result) {
+
           return {
-            noteItems: result.result.content 
+            noteItems: result.result.content
           }
         }
       }),
       new QueryAction({
-        name:'验证对方物料品相',
-        url:'/app/material/getLinkMaterialInfo',
-        query:{
-          noteItemId:'${noteItems}'
+        name: '验证对方物料品相',
+        url: '/app/material/getLinkMaterialInfo',
+        query: {
+          noteItemId: '${noteItems}'
         }
-      },{
-        parseHttpParam(param){
-          let noteItemId:any[] = param.noteItemId;
-          let row = noteItemId.find(item=>item.name=='香肉')
+      }, {
+        parseHttpParam(param) {
+          let noteItemId: any[] = param.noteItemId;
+          let row = noteItemId.find(item => item.name == '香肉')
           return {
-            noteItemId:row.linkNoteItemId,
-            warehouseGroupId:param.warehouseGroupId
+            noteItemId: row.linkNoteItemId,
+            warehouseGroupId: param.warehouseGroupId
           }
         },
-        check(result){
+        check(result) {
           result = result.result;
-          CheckUtil.expectEqualObj(result,{
-            name:'香肉',
-            remark:'香肉的品相'
+          CheckUtil.expectEqualObj(result, {
+            name: '香肉',
+            remark: '香肉的品相'
           })
         }
       }),
       ... this.buildInstockActions(),
 
-      ... this.buildCheckNoteItem('instock',{
-        targetCol:'linkInstockCnt',
-        feeMap:{
-          羊肉:10
+      ... this.buildCheckNoteItem('instock', {
+        targetCol: 'linkInstockCnt',
+        feeMap: {
+          羊肉: 10
         }
       }),
 
       new ListMaterial(),
       new CreateNote3M(),
       new CheckerMaterialLink()
-    
+
     ]
   }
 
-  private buildInstockActions():BaseTest[]{
+  private buildInstockActions(): BaseTest[] {
     return [
       new ProcessNote({
         action: 'accept',
@@ -625,7 +625,7 @@ export default class extends TestCase {
       }, {
         warehouseType: 'supplierWarehouse'
       }),
-      
+
       new ProcessNote({
         action: 'send',
         noteId: '${noteId}',
@@ -669,7 +669,7 @@ export default class extends TestCase {
       }, {
         warehouseType: 'supplierWarehouse',
         buildVariable(result) {
-          let content:any[] = result.result.content
+          let content: any[] = result.result.content
           return {
 
             cntAndPrices: NoteItemUtil.buildCntAndPrice(content, cntCol),
@@ -686,7 +686,7 @@ export default class extends TestCase {
           }
         }
 
-        
+
       }),
 
       new QueryAction({
@@ -713,7 +713,7 @@ export default class extends TestCase {
         }
       })
 
-      
+
     ]
   }
   getName(): string {
