@@ -1,14 +1,13 @@
 import { ArrayUtil, BaseTest, DateUtil, TestCase } from "testflow";
-import FindLastUserId from "../action/user/FindLastUserId";
-import AddSupplier from "../action/supplier/AddSupplier";
-import ListSupplier from "../action/supplier/ListSupplier";
-import GetOpenId from "../action/user/GetOpenId";
-import AddWarehouse from "../action/warehouse/AddWarehouse";
-import AddMaterial from "../action/material/AddMaterial";
-import Action from "../action/Action";
-import BatchProcessNote from "../action/note/BatchProcessNote";
-import ListNoteGroup from "../action/note/ListNoteGroup";
-import ListMaterial from "../action/material/ListMaterial";
+import ListSupplier from "../../action/supplier/ListSupplier";
+import Action from "../../action/Action";
+import BatchProcessNote from "../../action/note/BatchProcessNote";
+import ListNoteGroup from "../../action/note/ListNoteGroup";
+import FindLastUserId from "../../action/user/FindLastUserId";
+import GetOpenId from "../../action/user/GetOpenId";
+import AddWarehouse from "../../action/warehouse/AddWarehouse";
+import AddSupplier from "../../action/supplier/AddSupplier";
+
 const S_MaterialCnt = 800;
 const S_NoteCnt = 40;
 const S_DayCnt = 20

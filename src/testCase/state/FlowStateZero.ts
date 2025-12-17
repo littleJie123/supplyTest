@@ -1,9 +1,9 @@
 import { ArrayUtil, BaseTest, CheckUtil, DateUtil, HttpAction, TestCase } from "testflow";
-import PreTest from "./PreTest";
-import Action from "../action/Action";
-import BatchProcessNote from "../action/note/BatchProcessNote";
-import ListNoteGroup from "../action/note/ListNoteGroup";
-import { endianness } from "os";
+
+import Action from "../../action/Action";
+import BatchProcessNote from "../../action/note/BatchProcessNote";
+import ListNoteGroup from "../../action/note/ListNoteGroup";
+import PreTest from "../PreTest";
 const S_Days = 90;
 const S_InstockDay = 15;
 
@@ -106,21 +106,21 @@ export default class extends TestCase {
             table: 'stockRecord',
             query: {
               warehouseId: '${warehouse.warehouseId}',
-              isDel:0
+              isDel: 0
             }
           },
           {
             table: 'stateMaterial',
             query: {
               warehouseId: '${warehouse.warehouseId}',
-              isDel:0
+              isDel: 0
             }
           },
           {
             table: 'stateWarehouse',
             query: {
               warehouseId: '${warehouse.warehouseId}',
-              isDel:0
+              isDel: 0
             }
           }
         ]
@@ -193,10 +193,10 @@ export default class extends TestCase {
     ArrayUtil.order(stateMaterials, 'opening')
     let endCost = stateMaterials[stateMaterials.length - 1].endAmount;
     if (checkOpt?.endAmount != null) {
-       
-      
+
+
       CheckUtil.expectEqual(checkOpt.endAmount, endCost, `${stateMaterials[0].materialId}的最后金额出错了。${checkOpt.endAmount}和${endCost}`);
-      
+
     }
     let last = stateMaterials[stateMaterials.length - 1]
     let action = new HttpAction({
@@ -236,8 +236,8 @@ export default class extends TestCase {
       parseHttpParam: (param) => {
         let noCost: any[] = variable.noCost;
         let retParam: any = {
-          opt:{
-            hasStockRecords:true
+          opt: {
+            hasStockRecords: true
           }
         };
         let noteItems: any[] = [];
