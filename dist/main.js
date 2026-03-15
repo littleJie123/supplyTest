@@ -9,6 +9,9 @@ const runner = testflow_1.TestRunner.get();
 runner.regEnvConfig('local', {
     host: 'http://127.0.0.1:8080/'
 });
+runner.regEnvConfig('test', {
+    host: 'https://test.chaifeng.cc/'
+});
 runner.start({
     testPath: path_1.default.join(__dirname, './testCase'),
 });

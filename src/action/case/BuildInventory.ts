@@ -1,13 +1,15 @@
 import { BaseTest, TestCase } from "testflow";
 import Action from "../Action";
 import BuildUpdateStock from "./BuildUpdateStock";
+import BuildUpdateStockRecord from "./BuildUpdateStockRecord";
 
 interface Opt {
   materialCnt?: number;
   dayCnt?: number
   cntMap?: any
   defVal?: number;
-  defCost?: number
+  defCost?: number;
+  nameArray?: string[]
 }
 export default class extends TestCase {
   private opt: Opt
@@ -32,9 +34,8 @@ export default class extends TestCase {
     ]
     let dayCnt = this.getDayCnt();
     if (dayCnt >= 1) {
-      actions.push(... new BuildUpdateStock({
+      actions.push(... new BuildUpdateStockRecord({
         dayCnt: dayCnt,
-        tables: ['stockRecord', 'inventory']
       }).getActions());
     }
     return actions;
@@ -43,14 +44,26 @@ export default class extends TestCase {
   buildArray() {
     let ret: any[] = [];
     let materialCnt = this.opt.materialCnt ?? 5
-    for (let i = 0; i < materialCnt; i++) {
-      let name = '物料' + i;
-      ret.push({
-        materialId: `\${materialMap.${name}.materialId}`,
-        cnt: this.getValue('cntMap', name),
-        buyUnitFee: 1,
-        cost: this.opt.defCost ?? 10
-      })
+    let nameArray = this.opt.nameArray
+    if (nameArray == null) {
+      for (let i = 0; i < materialCnt; i++) {
+        let name = '物料' + i;
+        ret.push({
+          materialId: `\${materialMap.${name}.materialId}`,
+          cnt: this.getValue('cntMap', name),
+          buyUnitFee: 1,
+          cost: this.opt.defCost ?? 10
+        })
+      }
+    } else {
+      for (let name of nameArray) {
+        ret.push({
+          materialId: `\${materialMap.${name}.materialId}`,
+          cnt: this.getValue('cntMap', name),
+          buyUnitFee: 1,
+          cost: this.opt.defCost ?? 10
+        })
+      }
     }
     return ret;
   }
