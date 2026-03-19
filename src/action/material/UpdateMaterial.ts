@@ -2,6 +2,7 @@ import { HttpAction, IHttpActionParam } from "testflow";
 interface Opt{
   buyUnit?:any[]
   suppliers?:any[]
+   categoryId?: number | string;
 }
 
 function createParam(name:string,opt?:Opt): IHttpActionParam {
@@ -10,7 +11,9 @@ function createParam(name:string,opt?:Opt): IHttpActionParam {
     method:'POST',
     name:'更改物料:'+name,
     url:'/app/material/updateMaterial',
+     
     param: {
+      category:{categoryId:opt?.categoryId},
       name,
       "materialId":"${lastMaterialId}",
       "buyUnit": opt?.buyUnit ?? [

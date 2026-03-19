@@ -20,6 +20,7 @@ function createParam(name, opt) {
             ],
             "img": [],
             "name": name,
+            category: { categoryId: opt === null || opt === void 0 ? void 0 : opt.categoryId },
             ...getWarehouse(opt)
         }
     };

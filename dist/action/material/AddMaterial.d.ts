@@ -4,6 +4,7 @@ interface Opt {
     buyUnit?: any[];
     suppliers?: any[];
     type?: WarehouseType;
+    categoryId?: number | string;
 }
 export default class extends HttpAction {
     constructor(name: any, opt?: Opt);
