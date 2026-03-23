@@ -9,11 +9,12 @@ import BuildUpdateStock from "../../action/case/BuildUpdateStock";
 export default class extends TestCase {
   beginMaterial: number;
   getName(): string {
-    return '餐品模型'
+    return '餐品模型[不同价格]'
   }
-  protected buildActions(): BaseTest[] {
+
+  private buildProductAndBom(): BaseTest[] {
     return [
-      ... new PreTest().getActions(),
+
       new Action({
         name: '增加餐品',
         url: '/app/product/addProduct',
@@ -127,25 +128,52 @@ export default class extends TestCase {
           ]
         }
       }),
+    ]
+  }
+  protected buildActions(): BaseTest[] {
+    return [
+      ... new PreTest().getActions(),
+      ... this.buildProductAndBom(),
+      ... new BuildInventory({
+        dayCnt: 7,
+        defVal: 100,
+        defCost: 100,
+        nameArray: ['猪肉', '白菜', '鸡蛋']
+      }).getActions(),
+      ... new BuildInventory({
+        dayCnt: 7,
+        defVal: 200,
+        defCost: 150,
+        nameArray: ['猪肉', '白菜', '鸡蛋']
+      }).getActions(),
 
-      ... this.buildNote(7),
-      ... this.buildNote(7, {
+
+
+      ... this.buildNote(6, {
         needInstock: true,
-        cnt: 30,
-        buyUnitFee: -10
+        cnt: 10,
+        buyUnitFee: -10,
+        price: 2, 
       }),
 
-      ... this.buildNote(7, {
+      ... this.buildNote(6, {
         handInstock: true,
-        supplier: '供应商2'
+        cnt: 1,
+        buyUnitFee: -100,
+        price: 2,
+        supplier: '供应商2',
+         
       }),
-      ... this.buildNote(7, {
+      ... this.buildNote(6, {
         needStatement: true,
+        cnt: 10,
+        buyUnitFee: -10,
+        price: 2.5,
         supplier: '供应商2'
       }),
 
 
-      ... this.buildBack(6),
+
 
 
       new Action({
@@ -162,11 +190,6 @@ export default class extends TestCase {
       }),
 
       this.buildImportProduct(),
-      ... new BuildInventory({
-        dayCnt: 1,
-        defVal: 10,
-        nameArray: ['猪肉', '白菜', '鸡蛋']
-      }).getActions(),
       new Action({
         name: '全部计算',
         url: '/free/stateMaterial/recalStateMaterial',
@@ -178,6 +201,8 @@ export default class extends TestCase {
       ... this.buildCheckAction()
 
 
+
+
     ]
   }
 
@@ -185,11 +210,12 @@ export default class extends TestCase {
     let ret: BaseTest[] = []
     ret.push(
       new Action({
-        name: '根据分类统计',
-        url: '/app/state/analyseCategory',
+        name: '餐品成本物料价格',
+        url: '/app/state/analyseMaterialPriceOfProduct',
         param: {
           "warehouseId": '${warehouse.warehouseId}',
-
+          "productId": '${product.白菜猪肉}',
+          "materialId": '${materialMap.白菜.materialId}',
           "begin": StrDateUtil.beforeDay(7),
           "end": DateUtil.todayStr()
         }
@@ -198,148 +224,51 @@ export default class extends TestCase {
           let content = result?.result?.content;
           CheckUtil.expectEqualArray(content, [
             {
-              "categoryId": 1783,
-              "useAmount": 780,
-              "backAmount": 200,
-              "endAmount": 20,
-              "handInstockAmount": 200,
-              "instockAmount": 800,
-              "otherUseAmount": 0,
-              "salesAmount": 720,
-              "openingAmount": 0,
-              "buyUnitFee": 1,
-              "name": "肉类"
+              "price": {
+                "price": 100,
+                "buyUnitFee": -100
+              },
+              "begin": StrDateUtil.beforeDay(5),
+              "end": StrDateUtil.beforeDay(4),
+              "cnt": {
+                "cnt": 200,
+                "buyUnitFee": 1
+              },
+              "cost": 200
             },
             {
-              "categoryId": 1784,
-              "useAmount": 780,
-              "backAmount": 200,
-              "endAmount": 20,
-              "handInstockAmount": 200,
-              "instockAmount": 800,
-              "otherUseAmount": 0,
-              "salesAmount": 360,
-              "openingAmount": 0,
-              "buyUnitFee": 1,
-              "name": "蛋类"
+              "price": {
+                "price": 2,
+                "buyUnitFee": 1
+              },
+              "begin": StrDateUtil.beforeDay(4),
+              "end": StrDateUtil.beforeDay(3),
+              "cnt": {
+                "cnt": 200,
+                "buyUnitFee": 1
+              },
+              "cost": 400
             },
             {
-              "categoryId": 1785,
-              "useAmount": 780,
-              "backAmount": 200,
-              "endAmount": 20,
-              "handInstockAmount": 200,
-              "instockAmount": 800,
-              "otherUseAmount": 0,
-              "salesAmount": 360,
-              "openingAmount": 0,
-              "buyUnitFee": 1,
-              "name": "蔬菜"
+              "price": {
+                "price": 2.5,
+                "buyUnitFee": 1
+              },
+              "begin": StrDateUtil.beforeDay(2),
+              "end": StrDateUtil.beforeDay(2),
+              "cnt": {
+                "cnt": 10,
+                "buyUnitFee": -10
+              },
+              "cost": 250
             }
-          ], {
-            notCheckCols: ['categoryId']
-          })
+          ])
         }
       })
     )
-    ret.push(new Action({
-      name: '根据供应商检查',
-      url: '/app/state/analyseSupplier',
-      param: {
-        "warehouseId": '${warehouse.warehouseId}',
 
-        "begin": StrDateUtil.beforeDay(7),
-        "end": DateUtil.todayStr()
 
-      }
-    }, {
-      check(result) {
-        let content = result.result.content;
-        CheckUtil.expectEqualArray(content, [
-          {
-            "supplierId": 2617,
-            "useAmount": 1200,
-            "backAmount": 600,
-            "endAmount": 0,
-            "handInstockAmount": 0,
-            "instockAmount": 1800,
-            "otherUseAmount": 0,
-            "salesAmount": 1120,
-            "openingAmount": 0,
-            "buyUnitFee": 1,
-            "name": "供应商1"
-          },
-          {
-            "supplierId": 2618,
-            "useAmount": 1140,
-            "backAmount": 0,
-            "endAmount": 60,
-            "handInstockAmount": 600,
-            "instockAmount": 600,
-            "otherUseAmount": 0,
-            "salesAmount": 320,
-            "openingAmount": 0,
-            "buyUnitFee": 1,
-            "name": "供应商2"
-          }
-        ], {
-          notCheckCols: ['supplierId']
-        })
-      }
-    }))
 
-    ret.push(new Action({
-      name: '检查餐品物料',
-      url: '/app/state/analyseMaterialOfProduct',
-      param: {
-        "warehouseId": '${warehouse.warehouseId}',
-        "productId": '${product.白菜猪肉}',
-        "begin": StrDateUtil.beforeDay(7),
-        "end": DateUtil.todayStr()
-
-      }
-    }, {
-      check(result) {
-        let content = result.result.content;
-        CheckUtil.expectEqualArray(content, [
-          {
-            "materialId": 33334,
-            "cost": 360,
-            "theoryCost": 270,
-            "name": "猪肉",
-            "buyUnit": [
-              {
-                "unitsId": 18,
-                "fee": 1,
-                "isUnits": true,
-                "name": "瓶"
-              },
-              {
-                "unitsId": 5,
-                "fee": 10,
-                "isSupplier": true,
-                "name": "箱"
-              }
-            ]
-          },
-          {
-            "materialId": 33338,
-            "cost": 360,
-            "theoryCost": 360,
-            "name": "白菜",
-            "buyUnit": [
-              {
-                "unitsId": 18,
-                "fee": 1,
-                "isUnits": true,
-                "isSupplier": true,
-                "name": "瓶"
-              }
-            ]
-          }
-        ], { notCheckCols: ['materialId','buyUnit'] })
-      }
-    }))
     return ret;
   }
 
@@ -349,9 +278,11 @@ export default class extends TestCase {
       url: '/app/salesRecord/importSalesRecord',
       param: {
         datas: [
-          ... this.buildDay(-5, 10),
-          ... this.buildDay(-4, 6),
-          ... this.buildDay(-3, 2)
+          ... this.buildDay(-5, 8),
+          ... this.buildDay(-4, 14),
+          ... this.buildDay(-3, 17),
+          ... this.buildDay(-2, 20),
+          ... this.buildDay(-2, 1)
         ],
         warehouseId: '${warehouse.warehouseId}'
       }
@@ -360,18 +291,7 @@ export default class extends TestCase {
 
   private buildDay(day: number, cnt: number): any[] {
     return [
-      {
-        product: {
-          name: '红烧肉',
-          id: '${product.红烧肉}'
-        },
-        salesRecord: {
-          name: this.getDate(Math.abs(day))
-        },
-        cnt: {
-          name: cnt
-        }
-      },
+
       {
         product: {
           name: '白菜猪肉',
@@ -433,10 +353,12 @@ export default class extends TestCase {
     supplier?: string
     cnt?: number
     buyUnitFee?: number
-
+    price?: number;
+    instockCnt?: number;
+    yieldRate?: number
   }): BaseTest[] {
     let names = ['猪肉', '白菜', '鸡蛋']
-    let price = 2;
+    let price = opt?.price ?? 2;
     let cnt = opt?.cnt ?? 100
     let buyUnitFee = opt?.buyUnitFee ?? 1;
 
@@ -488,8 +410,32 @@ export default class extends TestCase {
           status: 'normal',
 
         }));
-        ret.push(new BatchProcessNote({
-          action: 'instock'
+        ret.push(new Action({
+          name:'入库',
+          url: '/app/note/processNote',
+          param: {
+            "noteId": '${note.noteId}',
+             
+            "action": "instock",
+            "warehouseId": '${warehouse.warehouseId}', 
+          }
+        }, {
+          parseHttpParam: (ret: any) => {
+            let variable = this.getVariable();
+            let noteItems: any[] = variable.note.noteItems;
+            noteItems = noteItems.map(row => ({
+              "noteItemId": row.noteItemId,
+              "cnt": row.cnt,
+              "instockCnt": opt?.instockCnt ?? row.cnt,
+
+              "price": row.price,
+              "stockBuyUnitFee": row.stockBuyUnitFee,
+              "materialId": row.materialId,
+              "yieldRate": opt?.yieldRate ?? 0
+            }))
+            ret.noteItems = noteItems;
+            return ret;
+          }
         }))
 
       }
@@ -503,6 +449,8 @@ export default class extends TestCase {
         ret.push(new BatchProcessNote({
           action: 'statement'
         }))
+
+
 
       }
 
