@@ -233,6 +233,38 @@ export default class extends TestCase {
         }
       )
     )
+
+    ret.push(new Action({
+      name: '测试：compareCost',
+      url: '/app/state/compareCost',
+      param: {
+        warehouseId: '${warehouse.warehouseId}',
+        begin: StrDateUtil.beforeDay(7),
+        end: StrDateUtil.beforeDay(1)
+      }
+
+    }, {
+      check(result) {
+        result = result.result;
+        CheckUtil.expectEqualArray(result.array, [
+          {
+            "type": "realCost",
+            "theoryCost": 650,
+            "cost": 565
+          },
+          {
+            "type": "bomCost",
+            "theoryCost": 650,
+            "cost": 1063.32
+          },
+          {
+            "type": "bomCost4RealCnt",
+            "cost": 565,
+            "theoryCost": 1063.32
+          }
+        ])
+      }
+    }))
     return ret;
   }
 
