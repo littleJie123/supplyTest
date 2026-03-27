@@ -6,12 +6,11 @@ import BuildInventory from "../../action/case/BuildInventory";
 export default class extends TestCase {
   beginMaterial: number;
   getName(): string {
-    return '餐品模型[analyseMaterialPriceOfProduct]'
+    return '餐品模型[综合测试]'
   }
 
   private buildProductAndBom(): BaseTest[] {
     return [
-
       new Action({
         name: '增加餐品',
         url: '/app/product/addProduct',
@@ -153,102 +152,143 @@ export default class extends TestCase {
 
       }
     }))
-
     ret.push(new Action({
-      name: 'AnalyseMaterialPriceOfProduct',
+      name: '验证AnalyseMaterialPriceOfProduct',
       url: '/app/state/analyseMaterialPriceOfProduct',
       param: {
         warehouseId: '${warehouse.warehouseId}',
         begin: StrDateUtil.beforeDay(7),
         end: StrDateUtil.beforeDay(1),
         materialId: '${materialMap.猪肉.materialId}',
-        productId: '${product.红烧肉}'
+        productId: '${product.白菜猪肉}'
+      },
+
+    }, {
+      check(result) {
+        CheckUtil.expectEqualObj(result.result, {
+          "bomPrice": { "price": 10, "buyUnitFee": -10 },
+          "theoryCost": 100,
+          "cost": 157.33,
+          "diffByPrice": -39.33,
+          "diffByCnt": 96.66
+        })
+      }
+    }))
+
+
+    ret.push(new Action({
+      name: '验证analyseMaterialOfProduct',
+      url: '/app/state/analyseMaterialOfProduct',
+      param: {
+        warehouseId: '${warehouse.warehouseId}',
+        begin: StrDateUtil.beforeDay(7),
+        end: StrDateUtil.beforeDay(1),
+        productId: '${product.白菜猪肉}'
+      },
+
+    }, {
+      check(result) {
+        let content = result.result.content;
+        CheckUtil.expectEqualArray(content,
+          [
+            {
+              "materialId": 33634,
+              "cost": 157.33,
+              "theoryCost": 100,
+              "name": "猪肉",
+              "buyUnit": [
+                {
+                  "unitsId": 18,
+                  "fee": 1,
+                  "isUnits": true,
+                  "name": "瓶"
+                },
+                {
+                  "unitsId": 5,
+                  "fee": 10,
+                  "isSupplier": true,
+                  "name": "箱"
+                }
+              ]
+            },
+            {
+              "materialId": 33638,
+              "cost": 147.5,
+              "theoryCost": 60,
+              "name": "白菜",
+              "buyUnit": [
+                {
+                  "unitsId": 18,
+                  "fee": 1,
+                  "isUnits": true,
+                  "isSupplier": true,
+                  "name": "瓶"
+                }
+              ]
+            }
+          ],
+          {
+            notCheckCols: ['materialId']
+          }
+        )
+      }
+    }))
+
+    ret.push(new Action({
+      name: '验证analyseProductsOfMaterial',
+      url: '/app/state/analyseProductsOfMaterial',
+      param: {
+        warehouseId: '${warehouse.warehouseId}',
+        begin: StrDateUtil.beforeDay(7),
+        end: StrDateUtil.beforeDay(1),
+        materialId: '${materialMap.猪肉.materialId}'
+      },
+
+    }, {
+      check(result) {
+        let content = result.result.content;
+        CheckUtil.expectEqualArray(content, [
+          {
+            "productId": "1662",
+            "cost": 157.34,
+            "bomPrice": {
+              "price": 10,
+              "buyUnitFee": -10
+            },
+            "theoryCost": 100,
+            "diffByCnt": 96.67,
+            "diffByPrice": -39.33,
+            "product": {
+              "productId": 1662,
+              "name": "白菜猪肉"
+            }
+          },
+          {
+            "productId": "1663",
+            "cost": 78.66,
+            "bomPrice": {
+              "price": 12,
+              "buyUnitFee": -10
+            },
+            "theoryCost": 60,
+            "diffByCnt": 57.99,
+            "diffByPrice": -39.33,
+            "product": {
+              "productId": 1663,
+              "name": "红烧肉"
+            }
+          }
+        ], {
+          notCheckCols: [
+            'productId',
+            'product.productId'
+          ]
+        })
       }
     }))
     return ret;
   }
 
-  private buildCheckAction(): BaseTest[] {
-    let ret: BaseTest[] = []
-    ret.push(
-      new Action({
-        name: 'bom出成率分析',
-        url: '/app/state/compareYieldRate',
-        param: {
-          "warehouseId": '${warehouse.warehouseId}',
-
-          "begin": StrDateUtil.beforeDay(7),
-          "end": DateUtil.todayStr(),
-          "materialId": '${materialMap.猪肉.materialId}'
-        }
-      }, {
-        check(result) {
-          let content = result?.result?.yieldOfProduct;
-          CheckUtil.expectEqualArray(content, [
-            {
-              "materialId": 33459,
-              "cnt": 10,
-              "buyUnitFee": 1,
-              "productId": 1561,
-              "yieldRate": 0.5,
-              "cost": 10,
-              "changeCnts": [],
-              "costOfYield": 0,
-              "product": {
-
-                "name": "红烧肉"
-              }
-            },
-            {
-              "materialId": 33459,
-              "cnt": 10,
-              "buyUnitFee": 1,
-              "productId": 1562,
-              "yieldRate": 0.5,
-              "cost": 15,
-              "changeCnts": [
-                {
-                  "cnt": 100,
-                  "cost": 200,
-                  "buyUnitFee": 1,
-                  "begin": "2026-03-16",
-                  "end": "2026-03-16",
-                  "yieldRate": 0.8
-                },
-                {
-                  "cnt": 100,
-                  "cost": 200,
-                  "buyUnitFee": 1,
-                  "begin": "2026-03-16",
-                  "end": "2026-03-18",
-                  "yieldRate": 0.7
-                },
-                {
-                  "cnt": 50,
-                  "cost": 125,
-                  "buyUnitFee": 1,
-                  "begin": "2026-03-18",
-                  "end": "2026-03-18",
-                  "yieldRate": 0.6
-                }
-              ],
-              "costOfYield": -225,
-              "product": {
-
-                "name": "白菜猪肉"
-              }
-            }
-          ], {
-            notCheckCols: ['materialId', 'productId']
-          })
-        }
-      })
-    )
-
-
-
-    return ret;
-  }
 
   private buildImportProduct(): Action {
     let days = []
