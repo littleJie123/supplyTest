@@ -1,25 +1,27 @@
 import { HttpAction, IHttpActionParam } from "testflow";
-interface Opt{
-  name:string;
-  stock:any;
+interface Opt {
+  name: string;
+  stock: any;
 }
 
-function createParam(opt:Opt): IHttpActionParam {
+function createParam(opt: Opt): IHttpActionParam {
+  let stock = opt.stock;
+  stock.materialId = "${materialMap." + opt?.name + ".materialId}"
   return {
-    name: '设置订货数量:'+opt?.name,
+    name: '设置订货数量:' + opt?.name,
     url: '/app/noteItem/addPurcharse',
-    method:'post',
+    method: 'post',
     param: {
       "stock": opt?.stock,
-      "materialId": "${materialMap."+opt?.name+".materialId}",
-      warehouseId:"${warehouse.warehouseId}",
-      warehouseGroupId:"${warehouse.warehouseGroupId}",
+
+      warehouseId: "${warehouse.warehouseId}",
+      warehouseGroupId: "${warehouse.warehouseGroupId}",
     }
   }
 }
 export default class extends HttpAction {
-  constructor(opt:Opt) {
-    
+  constructor(opt: Opt) {
+
     super(createParam(opt))
   }
 }

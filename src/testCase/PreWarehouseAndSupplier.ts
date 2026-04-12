@@ -6,7 +6,7 @@ import SaveMaterial from "../action/material/SaveMaterial";
 import CreateNote3M from "../action/note/CreateNote3M";
 import QueryAction from "../action/QueryAction";
 import SaveShareData from "../action/shareData/SaveShareData";
-import ChangeWarehouse from "../action/user/ChangeWarehouse";
+import ChangeWarehouse2Supplier from "../action/user/ChangeWarehouse2Supplier";
 import AddWarehouse from "../action/warehouse/AddWarehouse";
 
 export default class extends TestCase {
@@ -88,7 +88,7 @@ export default class extends TestCase {
           "usersId": "${usersId}",
         }
       }),
-      new ChangeWarehouse(),
+      new ChangeWarehouse2Supplier(),
       new Action({
         url: '/share/linkNote',
         name: '接单',

@@ -12,6 +12,12 @@ runner.regEnvConfig('local', {
 runner.regEnvConfig('test', {
     host: 'https://test.chaifeng.cc/'
 });
+runner.setHeadProcess({
+    processHeader(header) {
+        header.token = '${token}';
+        return header;
+    },
+});
 runner.start({
     testPath: path_1.default.join(__dirname, './testCase'),
 });

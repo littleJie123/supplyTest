@@ -342,11 +342,11 @@ export default class extends TestCase {
     return ret;
   }
 
-  private buildBack(day: number) {
+  private build(day: number) {
     let ret: BaseTest[] = [];
     ret.push(new Action({
       name: '创建退货单',
-      url: '/app/noteBack/createNoteBack',
+      url: '/app/note/createNote',
       param: {
         warehouseId: '${warehouse.warehouseId}',
         items: '${note.noteItems}'

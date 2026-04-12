@@ -153,7 +153,7 @@ export default class extends TestCase {
         needInstock: true,
         cnt: 10,
         buyUnitFee: -10,
-        price: 2, 
+        price: 2,
       }),
 
       ... this.buildNote(6, {
@@ -162,7 +162,7 @@ export default class extends TestCase {
         buyUnitFee: -100,
         price: 2,
         supplier: '供应商2',
-         
+
       }),
       ... this.buildNote(6, {
         needStatement: true,
@@ -331,7 +331,7 @@ export default class extends TestCase {
     let ret: BaseTest[] = [];
     ret.push(new Action({
       name: '创建退货单',
-      url: '/app/noteBack/createNoteBack',
+      url: '/app/noteBack/createNote',
       param: {
         warehouseId: '${warehouse.warehouseId}',
         items: '${note.noteItems}'
@@ -411,13 +411,13 @@ export default class extends TestCase {
 
         }));
         ret.push(new Action({
-          name:'入库',
+          name: '入库',
           url: '/app/note/processNote',
           param: {
             "noteId": '${note.noteId}',
-             
+
             "action": "instock",
-            "warehouseId": '${warehouse.warehouseId}', 
+            "warehouseId": '${warehouse.warehouseId}',
           }
         }, {
           parseHttpParam: (ret: any) => {

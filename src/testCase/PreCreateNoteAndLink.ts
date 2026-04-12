@@ -4,24 +4,24 @@ import ListMaterial from "../action/material/ListMaterial";
 import CreateNote3M from "../action/note/CreateNote3M";
 import QueryAction from "../action/QueryAction";
 import SaveShareData from "../action/shareData/SaveShareData";
-import ChangeWarehouse from "../action/user/ChangeWarehouse";
+import ChangeWarehouse2Supplier from "../action/user/ChangeWarehouse2Supplier";
 import AddWarehouse from "../action/warehouse/AddWarehouse";
 import AddSupplier from "../action/supplier/AddSupplier";
 import AddMaterial from "../action/material/AddMaterial";
-interface Opt{
-  supplierName?:string
+interface Opt {
+  supplierName?: string
 }
 /**
  * warehouseType = supplierWarehouse 为供应商
  * 构建出订单和供应商 并且关联
  */
 export default class extends TestCase {
-  private opt:Opt;
-  constructor(opt?:Opt){
+  private opt: Opt;
+  constructor(opt?: Opt) {
     super();
     this.opt = opt
   }
-  getSupplierName(){
+  getSupplierName() {
     return this.opt?.supplierName ?? '供应商1'
   }
 
@@ -34,20 +34,20 @@ export default class extends TestCase {
 
       new CreateNote3M(),
 
-      
+
       new AddWarehouse({
         name: '新供应商',
         variableType: 'supplierWarehouse',
         type: 'supplier'
 
       }),
-      new AddMaterial('羊肉',{
-        type:'supplierWarehouse',
-        buyUnit:[
-          {  "name": "克", "fee": 1 },
+      new AddMaterial('羊肉', {
+        type: 'supplierWarehouse',
+        buyUnit: [
+          { "name": "克", "fee": 1 },
           { "isSupplier": true, "name": "瓶", "fee": 500 }
         ],
-        suppliers:[]
+        suppliers: []
       }),
       new QueryAction({
         name: '查询订单',
@@ -75,7 +75,7 @@ export default class extends TestCase {
           "usersId": "${usersId}",
         }
       }),
-      new ChangeWarehouse(),
+      new ChangeWarehouse2Supplier(),
       new Action({
         url: '/share/linkNote',
         name: '接单',

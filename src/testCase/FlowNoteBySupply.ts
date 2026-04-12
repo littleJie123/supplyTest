@@ -7,7 +7,7 @@ import CreateNote3M from "../action/note/CreateNote3M";
 import QueryAction from "../action/QueryAction";
 import SaveShareData from "../action/shareData/SaveShareData";
 import Action from "../action/Action";
-import ChangeWarehouse from "../action/user/ChangeWarehouse";
+import ChangeWarehouse2Supplier from "../action/user/ChangeWarehouse2Supplier";
 import ListNoteGroup from "../action/note/ListNoteGroup";
 import BatchProcessNote from "../action/note/BatchProcessNote";
 import SaveMaterial from "../action/material/SaveMaterial";
@@ -80,7 +80,7 @@ export default class extends TestCase {
           "usersId": "${usersId}",
         }
       }),
-      new ChangeWarehouse(),
+      new ChangeWarehouse2Supplier(),
       new Action({
         url: '/app/note/linkNote',
         name: '接单',

@@ -5,6 +5,7 @@ import BatchProcessNote from "../action/note/BatchProcessNote";
 import ListNoteGroup from "../action/note/ListNoteGroup";
 
 interface Opt {
+  needNoteItems?: boolean;
   day?: number;
   needInstock?: boolean;
   needStatement?: boolean;
@@ -82,6 +83,25 @@ export default class extends TestCase {
           status: 'normal'
         }
       }));
+      if (opt?.needNoteItems) {
+        ret.push(
+          new Action({
+            url: '/app/noteItem/listNoteItem',
+            name: '查询订单物料',
+            param: {
+              noteId: '${noteIds}'
+            }
+          }, {
+            buildVariable(result) {
+              let content = result.result.content;
+              return {
+                noteItems: content
+              }
+            }
+          })
+        )
+      }
+
       if (opt?.needInstock || opt?.needStatement) {
         ret.push(new ListNoteGroup({
           groupType: 'NoteDay',

@@ -1,6 +1,6 @@
 import { UrlAction } from "testflow";
 
-export default class GetOpenId extends UrlAction{
+export default class GetOpenId extends UrlAction {
   protected getMethod(): string {
     return 'GET';
   }
@@ -11,9 +11,9 @@ export default class GetOpenId extends UrlAction{
   protected buildVariable(result: any) {
 
     return {
-      usersId:result.result.token.usersId,
-      warehouse:result.result.warehouse,
-      token:result.result.token.token
+      usersId: result.result.token.usersId,
+      warehouse: result.result.warehouse,
+      token: result.result.token.token
     };
   }
 
