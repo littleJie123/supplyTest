@@ -278,6 +278,15 @@ export default class extends TestCase {
       }
     }))
 
+    ret.push(new Action({
+      name: '全部计算',
+      url: '/free/stateMaterial/recalStateMaterial',
+      param: {
+        warehouseId: '${warehouse.warehouseId}'
+
+      }
+    }))
+
 
     return ret;
   }

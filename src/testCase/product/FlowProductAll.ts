@@ -4,7 +4,7 @@ import Action from "../../action/Action";
 import PreNote from "../PreNote";
 import BuildInventory from "../../action/case/BuildInventory";
 export default class extends TestCase {
-  beginMaterial: number;
+
   getName(): string {
     return '餐品模型[综合测试]'
   }
