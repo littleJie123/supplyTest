@@ -169,14 +169,14 @@ export default class extends TestCase {
             {
               "cnt": {
                 "buyUnitFee": 1,
-                "cnt": 330,
+                "cnt": 350,
                 "stockUnitsId": 0
               },
               "theoryCnt": {
                 "cnt": 100,
                 "buyUnitFee": 1
               },
-              "cost": 165,
+              "cost": 175,
               "theoryCost": 100,
               "hasBeginInventory": true,
               "hasEndInventory": false,
@@ -206,9 +206,9 @@ export default class extends TestCase {
             CheckUtil.expectEqualArray(content, [
               {
                 "productId": "1740",
-                "cost": 298.34,
+                "cost": 308.34,
                 "costOfBom": 200,
-                "diff": 98.34,
+                "diff": 108.34,
                 "name": "白菜猪肉",
                 "scaleName": ""
               },
@@ -250,17 +250,17 @@ export default class extends TestCase {
           {
             "type": "realCost",
             "theoryCost": 650,
-            "cost": 565
+            "cost": 575
           },
           {
             "type": "bomCost",
             "theoryCost": 650,
-            "cost": 1063.32
+            "cost": 1083.32
           },
           {
             "type": "bomCost4RealCnt",
-            "cost": 565,
-            "theoryCost": 1063.32
+            "cost": 575,
+            "theoryCost": 1083.32
           }
         ])
       }
@@ -300,9 +300,9 @@ export default class extends TestCase {
   private buildImportProduct(): Action {
     let days = []
 
-    days.push(... this.buildDay(6, 2))
-    days.push(... this.buildDay(5, 3))
-    days.push(... this.buildDay(4, 5))
+    days.push(... this.buildDay(4, 2))
+    days.push(... this.buildDay(3, 3))
+    days.push(... this.buildDay(2, 5))
 
     return new Action({
       name: '上传销售记录',

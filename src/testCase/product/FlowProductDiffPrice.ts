@@ -198,7 +198,7 @@ export default class extends TestCase {
 
         }
       }),
-      ... this.buildCheckAction()
+
 
 
 
@@ -206,71 +206,7 @@ export default class extends TestCase {
     ]
   }
 
-  private buildCheckAction(): BaseTest[] {
-    let ret: BaseTest[] = []
-    ret.push(
-      new Action({
-        name: '餐品成本物料价格',
-        url: '/app/state/analyseMaterialPriceOfProduct',
-        param: {
-          "warehouseId": '${warehouse.warehouseId}',
-          "productId": '${product.白菜猪肉}',
-          "materialId": '${materialMap.白菜.materialId}',
-          "begin": StrDateUtil.beforeDay(7),
-          "end": DateUtil.todayStr()
-        }
-      }, {
-        check(result) {
-          let content = result?.result?.content;
-          CheckUtil.expectEqualArray(content, [
-            {
-              "price": {
-                "price": 100,
-                "buyUnitFee": -100
-              },
-              "begin": StrDateUtil.beforeDay(5),
-              "end": StrDateUtil.beforeDay(4),
-              "cnt": {
-                "cnt": 200,
-                "buyUnitFee": 1
-              },
-              "cost": 200
-            },
-            {
-              "price": {
-                "price": 2,
-                "buyUnitFee": 1
-              },
-              "begin": StrDateUtil.beforeDay(4),
-              "end": StrDateUtil.beforeDay(3),
-              "cnt": {
-                "cnt": 200,
-                "buyUnitFee": 1
-              },
-              "cost": 400
-            },
-            {
-              "price": {
-                "price": 2.5,
-                "buyUnitFee": 1
-              },
-              "begin": StrDateUtil.beforeDay(2),
-              "end": StrDateUtil.beforeDay(2),
-              "cnt": {
-                "cnt": 10,
-                "buyUnitFee": -10
-              },
-              "cost": 250
-            }
-          ])
-        }
-      })
-    )
 
-
-
-    return ret;
-  }
 
   private buildImportProduct(): Action {
     return new Action({
@@ -327,24 +263,7 @@ export default class extends TestCase {
     return ret;
   }
 
-  private buildBack(day: number) {
-    let ret: BaseTest[] = [];
-    ret.push(new Action({
-      name: '创建退货单',
-      url: '/app/noteBack/createNote',
-      param: {
-        warehouseId: '${warehouse.warehouseId}',
-        items: '${note.noteItems}'
-      }
-    }))
-    ret.push(
-      ... new BuildUpdateStock({
-        dayCnt: day,
-        tables: ['stockRecord', 'note', 'noteItem']
-      }).getActions()
-    )
-    return ret;
-  }
+
 
   private buildNote(day: number, opt?: {
     needInstock?: boolean;

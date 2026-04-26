@@ -106,11 +106,11 @@ export default class extends TestCase {
       }),
       new BatchProcessByNoteId({
         index: 0,
-        action:'statement'
+        action: 'statement'
       }),
       new BatchProcessByNoteId({
         index: 1,
-        action:'statement'
+        action: 'statement'
       }),
 
       new ListNoteGroup({
@@ -334,21 +334,21 @@ export default class extends TestCase {
         }
       }),
       new QueryAction({
-        name:'验证手动单',
-        url:'/app/note/listNote',
-        query:{
+        name: '验证手动单',
+        url: '/app/note/listNote',
+        query: {
           status: "statement"
         }
-      },{
-        buildVariable(result){
-          let content:any[] = result.result.content;
-          content = content.filter(row=>{
-            let title:string = row.title
+      }, {
+        buildVariable(result) {
+          let content: any[] = result.result.content;
+          content = content.filter(row => {
+            let title: string = row.title
             return title.startsWith('手')
           })
-          CheckUtil.expectFindByArray(content,[
-            {cost:300},
-            {cost:600}
+          CheckUtil.expectFindByArray(content, [
+            { cost: 300 },
+            { cost: 600 }
           ])
         }
       })

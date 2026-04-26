@@ -164,7 +164,12 @@ export default class extends TestCase {
   }
 
   getName(): string {
-    return '创建订单'
+    let ret = '创建订单'
+    if (this.theOpt?.names != null && this.theOpt.names.length > 0) {
+      ret += this.theOpt.names.join(',')
+    }
+
+    return ret;
   }
   needInScreen(): boolean {
     return false;
