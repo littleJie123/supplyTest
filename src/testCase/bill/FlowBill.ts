@@ -55,9 +55,10 @@ export default class extends TestCase {
       }
     }, {
       buildVariable(result) {
-        let conent = result.result.content;
+        let content = result.result.content;
         return {
-          noteIds: ArrayUtil.toArray(conent, 'noteId')
+          noteIds: ArrayUtil.toArray(content, 'noteId'),
+          noteId: content[0].noteId
         }
       }
     }))
@@ -92,11 +93,12 @@ export default class extends TestCase {
       url: '/app/bill/removeNote',
       name: '移除订单',
       param: {
-        billId: '${billId}'
+        billId: '${billId}',
+        remark: '不想要了'
       }
     }, {
       parseHttpParam(param, varibale) {
-        param.noteId = varibale.noteIds[0];
+        param.noteId = varibale.noteId;
         return param
       },
       check(result) {
@@ -147,6 +149,163 @@ export default class extends TestCase {
       check(result) {
       }
     }))
+
+    ret.push(new Action({
+      url: '/app/note/listNote',
+      name: '查询订单',
+      param: {
+        billId: '${billId}'
+      }
+    }, {
+
+      buildVariable(result) {
+        let conent = result.result.content;
+        return {
+          noteIds: ArrayUtil.toArray(conent, 'noteId')
+        }
+      }
+    }))
+
+    ret.push(new Action({
+      url: '/app/noteItem/listNoteItem',
+      name: '查询订单物料',
+      param: {
+        noteId: '${noteIds}'
+      }
+    }, {
+
+      buildVariable(result) {
+        let content = result.result.content
+        return {
+          noteItemId: content[0].noteItemId
+        }
+      }
+    }))
+
+    ret.push(new Action({
+      url: '/app/bill/updateNoteItem4Bill',
+      name: '修改对账单物料',
+      param: {
+        noteItemId: '${noteItemId}',
+        statementCnt: {
+          cnt: 5,
+          buyUnitFee: -10
+
+        },
+        price: {
+          price: 20,
+          buyUnitFee: 10
+        },
+        remark: '修改了'
+      }
+    }));
+
+    ret.push(new Action({
+      url: '/app/bill/addNote2Bill',
+      name: '增加订单到对账单',
+      param: {
+        billId: '${billId}'
+      }
+    }, {
+      parseHttpParam(param, varibale) {
+        param.noteId = varibale.noteId;
+        return param
+      }
+    }));
+
+
+
+
+
+
+
+    ret.push(new Action({
+      url: '/app/bill/removeBill',
+      name: '删除对账单',
+      param: {
+        billId: '${billId}'
+      }
+    }, {
+      parseHttpParam(param, varibale) {
+        param.noteId = varibale.noteId;
+        return param
+      }
+    }));
+
+    ret.push(new Action({
+      url: '/app/note/schNote4Bill',
+      name: '查询订单',
+      param: {
+        warehouseId: '${warehouse.warehouseId}'
+      }
+    }, {
+      buildVariable(result) {
+        let content = result.result.content;
+        return {
+          noteIds: ArrayUtil.toArray(content, 'noteId'),
+          noteId: content[0].noteId
+        }
+      }
+    }))
+
+    ret.push(new Action({
+      url: '/app/bill/createBill',
+      name: '重新生成对账单',
+      param: {
+        warehouseId: '${warehouse.warehouseId}',
+        noteIds: '${noteIds}'
+
+      }
+    }, {
+
+      buildVariable(result) {
+        let bill = result.result;
+        return {
+          billId: bill.billId
+        }
+      }
+    }))
+
+    ret.push(new Action({
+      url: '/app/note/listNote',
+      name: '查询订单',
+      param: {
+        billId: '${billId}'
+      }
+    }, {
+      parseHttpParam(param, varibale) {
+        param.noteId = varibale.noteId;
+        return param
+      }
+    }));
+
+    ret.push(new Action({
+      url: '/app/bill/SetNoteStatusInBill',
+      name: '设置订单状态',
+      param: {
+        billId: '${billId}',
+        status: 'statement'
+      }
+    }, {
+      parseHttpParam(param, varibale) {
+        param.noteId = varibale.noteIds[0];
+        return param
+      }
+    }));
+
+    ret.push(new Action({
+      url: '/app/bill/SetNoteStatusInBill',
+      name: '设置订单状态1',
+      param: {
+        billId: '${billId}',
+        status: 'statement'
+      }
+    }, {
+      parseHttpParam(param, varibale) {
+        param.noteId = varibale.noteIds[1];
+        return param
+      }
+    }));
 
 
 
