@@ -3,7 +3,7 @@ import { WarehouseType } from "../../inf/IOpt";
 interface Opt{
   warehouseType:WarehouseType
 }
-export default class AddSupplier extends HttpAction {
+export default class ListSupplier extends HttpAction {
 
   constructor(opt?:Opt){
     

@@ -3,6 +3,7 @@ import PreTest from "../PreTest";
 import Action from "../../action/Action";
 import PreNote from "../PreNote";
 import BuildInventory from "../../action/case/BuildInventory";
+import Instock from "../../action/note/Instock";
 export default class extends TestCase {
   beginMaterial: number;
   getName(): string {
@@ -36,15 +37,15 @@ export default class extends TestCase {
       cnt: 10,
       price: 20,
       names: ['羊肉', '猪肉', '牛肉'],
-      needInstock: true
+      needInstock: true,
+      needNoteItems: true
     }))
 
-    ret.push(new PreNote({
-      cnt: 10,
-      price: 30,
-      names: ['鸡蛋'],
-      needStatement: true
+    ret.push(... this.buildBack({
+      cnt: 5
     }))
+
+
 
 
     ret.push(new Action({
@@ -60,7 +61,12 @@ export default class extends TestCase {
           noteIds: ArrayUtil.toArray(content, 'noteId'),
           noteId: content[0].noteId
         }
+      },
+      check(result) {
+        let content = result.result.content;
+        CheckUtil.expectEqual(content.length, 3)
       }
+
     }))
 
     ret.push(new Action({
@@ -75,10 +81,10 @@ export default class extends TestCase {
       check(result) {
         result = result.result
         CheckUtil.expectEqualObj(result, {
-          "noteCnt": 2,
-          "itemCnt": 5,
-          "instockCost": 1000,
-          "statementCost": 1000
+          "noteCnt": 3,
+          "itemCnt": 8,
+          "instockCost": 1000 - 5 * 20 * 3,
+          "statementCost": 1000 - 5 * 20 * 3
         })
       },
       buildVariable(result) {
@@ -107,6 +113,30 @@ export default class extends TestCase {
     }))
 
     ret.push(new Action({
+      url: '/app/note/listNote',
+      name: '验证移除',
+      param: {
+        billId:'${billId}'
+      }
+    }, {
+
+      check(result) {
+        let content: any[] = result.result.content;
+        content = content.filter(row => row.billId != 0)
+        CheckUtil.expectEqual(content.length, 2);
+      },
+      buildVariable(result){
+        let content: any[] = result.result.content;
+        let back = content.find(row=>row.type=='back');
+        let thePurcharse = content.find(row=>row.type!='back');
+        return {
+          backId:back.noteId,
+          theNoteId:thePurcharse.noteId
+        }
+      }
+    }))
+
+    ret.push(new Action({
       url: '/app/bill/listUpdateHis4bill',
       name: '查询日志',
       param: {
@@ -122,18 +152,37 @@ export default class extends TestCase {
 
     ret.push(new Action({
       url: '/app/bill/updateBill',
-      name: '修改订单',
+      name: '修改对账单',
       param: {
         billId: '${billId}',
         payCost: 100,
         payFee: 0.8,
-        already: false,
+        already: true,
         remark: '12312312'
       }
     }, {
 
       check(result) {
 
+      }
+    }))
+
+    ret.push(new Action({
+      url: '/app/bill/listBill',
+      name: '验证修改',
+      param: {
+      }
+    }, {
+
+      check(result) {
+        let bill = result.result.content[0]
+        CheckUtil.expectEqualObj(
+          bill,{
+            payCost: 100,
+            payFee: 0.8,
+            already: 1,
+          }
+        )
       }
     }))
 
@@ -152,7 +201,7 @@ export default class extends TestCase {
 
     ret.push(new Action({
       url: '/app/note/listNote',
-      name: '查询订单',
+      name: '验证设置状态',
       param: {
         billId: '${billId}'
       }
@@ -163,6 +212,11 @@ export default class extends TestCase {
         return {
           noteIds: ArrayUtil.toArray(conent, 'noteId')
         }
+      },
+      check(result){
+        let content:any[] = result.result.content;
+        content = content.filter(row=>row.status != 'statement')
+        CheckUtil.expectEqual(content.length,0);
       }
     }))
 
@@ -170,7 +224,7 @@ export default class extends TestCase {
       url: '/app/noteItem/listNoteItem',
       name: '查询订单物料',
       param: {
-        noteId: '${noteIds}'
+        noteId: '${theNoteId}'
       }
     }, {
 
@@ -186,32 +240,113 @@ export default class extends TestCase {
       url: '/app/bill/updateNoteItem4Bill',
       name: '修改对账单物料',
       param: {
+        billId:'${billId}',
         noteItemId: '${noteItemId}',
         statementCnt: {
-          cnt: 5,
-          buyUnitFee: -10
+          cnt: 8,
+          buyUnitFee: 1
 
         },
         price: {
-          price: 20,
-          buyUnitFee: 10
+          price: 15,
+          buyUnitFee: 1
         },
         remark: '修改了'
       }
     }));
 
     ret.push(new Action({
+      url: '/app/bill/listBill',
+      name: '验证修改物料',
+      param: {
+         
+      }
+    },{
+      check(result){
+        let content = result.result.content;
+        CheckUtil.expectEqualObj(content[0],{
+          statementCost:220.00,
+          instockCost:250
+        })
+      }
+    }));
+
+    ret.push(new Action({
+      url: '/app/noteItem/listNoteItem',
+      name: '查询退货单物料',
+      param: {
+        noteId: '${backId}'
+      }
+    }, {
+
+      buildVariable(result) {
+        let content = result.result.content
+        return {
+          noteItemId: content[0].noteItemId
+        }
+      }
+    }))
+
+    ret.push(new Action({
+      url: '/app/bill/updateNoteItem4Bill',
+      name: '修改退货单物料',
+      param: {
+        billId:'${billId}',
+        noteItemId: '${noteItemId}',
+        statementCnt: {
+          cnt: 4,
+          buyUnitFee: 1
+
+        },
+        price: {
+          price: 15,
+          buyUnitFee: 1
+        },
+        remark: '修改了'
+      }
+    }));
+
+    ret.push(new Action({
+      url: '/app/bill/listBill',
+      name: '验证退货单修改',
+      param: {
+      }
+    }, {
+
+      check(result) {
+        let bill = result.result.content[0]
+        CheckUtil.expectEqualObj(
+          bill,{
+            instockCost:550-275,
+            statementCost:520-260
+          }
+        )
+      }
+    }))
+
+    ret.push(new Action({
+      url:'/app/note/listNote',
+      name:'查询不在bill的订单',
+      param:{
+        billId:0
+      }
+    },{
+      buildVariable(result){
+        let content = result.result.content;
+        return {
+          nodeId:content[0].nodeId
+        }
+      }
+    }))
+
+    ret.push(new Action({
       url: '/app/bill/addNote2Bill',
       name: '增加订单到对账单',
       param: {
-        billId: '${billId}'
+        billId: '${billId}',
+        noteId:'${noteId}'
       }
-    }, {
-      parseHttpParam(param, varibale) {
-        param.noteId = varibale.noteId;
-        return param
-      }
-    }));
+    } ));
 
 
 
@@ -317,7 +452,37 @@ export default class extends TestCase {
 
 
 
+  private buildBack(opt?: { cnt?: number }): BaseTest[] {
 
+    let ret: BaseTest[] = [];
+    let variable = this.getVariable()
+    ret.push(new Action({
+      name: '退货',
+      url: '/app/noteBack/createNoteBack',
+      param: {
+        warehouseId: '${warehouse.warehouseId}',
+        warehouseGroupId: '${warehouse.warehouseGroupId}'
+      }
+    }, {
+      parseHttpParam(param) {
+        let noteItems: any[] = variable.noteItems;
+        param.items = noteItems.map(row => ({
+
+          "cnt": opt?.cnt ?? 100,
+          "buyUnitFee": row.buyUnitFee,
+          "price": row.price,
+          "noteItemId": row.noteItemId,
+          "supplierId": row.supplierId,
+          "materialId": row.materialId,
+          "stockBuyUnitFee": row.stockBuyUnitFee,
+          "stockUnitsId": row.stockUnitsId
+        }))
+        return param;
+      },
+    }))
+
+    return ret;
+  }
 
 
 

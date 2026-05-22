@@ -4,7 +4,7 @@ import Action from "../../action/Action";
 import PreNote from "../PreNote";
 import BuildInventory from "../../action/case/BuildInventory";
 export default class extends TestCase {
-  beginMaterial: number;
+
   getName(): string {
     return '餐品模型'
   }
@@ -23,7 +23,13 @@ export default class extends TestCase {
       ... this.doBuildProductAndBom('东坡肉', ['猪肉'], {
         price: 0.5,
         stockBuyUnitFee: 1
+      }),
+      ... this.doBuildProductAndBom('炒鸡蛋', [], {
+        price: 0.5,
+        stockBuyUnitFee: 1
       })
+
+
     ]
   }
 
@@ -83,7 +89,7 @@ export default class extends TestCase {
    */
   protected buildActions(): BaseTest[] {
     let ret: BaseTest[] = [
-      ... new PreTest().getActions(),
+      new PreTest(),
       ... this.buildProductAndBom()
     ]
 
@@ -210,20 +216,32 @@ export default class extends TestCase {
                 "costOfBom": 200,
                 "diff": 108.34,
                 "name": "白菜猪肉",
-                "scaleName": ""
+                "scaleName": "",
+                "cnt": 10,
               },
               {
                 "productId": "1735",
                 "cost": 133.33,
                 "costOfBom": 400,
                 "name": "红烧肉",
-                "scaleName": ""
+                "scaleName": "",
+                "cnt": 10,
               },
               {
                 "productId": "1736",
                 "cost": 133.33,
                 "costOfBom": 50,
                 "name": "东坡肉",
+                "scaleName": "",
+                "cnt": 10,
+              },
+              {
+                "productId": 2642,
+                "cnt": 10,
+                "cost": 0,
+                "costOfBom": 0,
+                "diff": 0,
+                "name": "炒鸡蛋",
                 "scaleName": ""
               }
             ], {
@@ -351,6 +369,18 @@ export default class extends TestCase {
         cnt: {
           name: Math.abs(cnt)
         }
+      },
+      {
+        product: {
+          name: '炒鸡蛋',
+          id: '${product.炒鸡蛋}'
+        },
+        salesRecord: {
+          name: this.getDate(Math.abs(day))
+        },
+        cnt: {
+          name: Math.abs(cnt)
+        }
       }
     ]
   }
@@ -378,10 +408,12 @@ export default class extends TestCase {
     names?: string[]
     stockBuyUnitFee?: number
   }): BaseTest[] {
-    return new PreNote({
-      ...opt,
-      day
-    }).getActions();
+    return [
+      new PreNote({
+        ...opt,
+        day
+      })
+    ];
   }
 
 }

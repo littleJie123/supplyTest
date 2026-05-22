@@ -30,7 +30,7 @@ function createParam(opt?:Opt,afterProcess?:IOpt): IHttpActionParam {
 
 export default class extends HttpAction {
 
-  constructor(opt:Opt,afterProcess:IOpt) {
+  constructor(opt:Opt,afterProcess?:IOpt) {
     super(createParam(opt,afterProcess))
 
   }
