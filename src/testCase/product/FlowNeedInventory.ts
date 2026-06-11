@@ -54,10 +54,11 @@ export default class extends TestCase {
 
       }, {
         check(result) {
-          result = result.result; 
+          result = result.result;
           CheckUtil.expectEqualObj(result,
             {
               "needInventoryMaterialCnt": 3,
+              "noSalesRecordDays": 20 - 3
             }
           )
         }
@@ -77,8 +78,8 @@ export default class extends TestCase {
         check(result) {
           result = result.result;
           let content = result.content;
-          let pig = content.find(row=>row.name=='猪肉')
-          CheckUtil.expectEqual(pig == null,true)
+          let pig = content.find(row => row.name == '猪肉')
+          CheckUtil.expectEqual(pig == null, true)
 
         }
       }),
@@ -95,7 +96,7 @@ export default class extends TestCase {
         check(result) {
           result = result.result;
           let content = result.content;
-          CheckUtil.expectEqual(content.length,4);
+          CheckUtil.expectEqual(content.length, 4);
         }
       }),
 
@@ -110,17 +111,105 @@ export default class extends TestCase {
 
       }, {
         check(result) {
-          let array:any[] = result.result;
-          CheckUtil.expectEqual(array.length,20-3)
+          let array: any[] = result.result;
+          CheckUtil.expectEqual(array.length, 20 - 3)
           let map = {
-            '2026-04-10':true,
-            '2026-04-11':true,
-            '2026-04-12':true,
+            '2026-04-10': true,
+            '2026-04-11': true,
+            '2026-04-12': true,
           }
-          array = array.filter(row=>map[row])
-          CheckUtil.expectEqual(array.length,0)
+          let filterArray = array.filter(row => map[row])
+          CheckUtil.expectEqual(filterArray.length, 0)
+          let row = array.find(row => row == '2026-04-20')
+          CheckUtil.expectEqual(row != null, true)
+        }
+      }),
+
+      new Action({
+        url: '/app/state/addNoSalesDay',
+        name: '增加',
+        param: {
+          "warehouseId": '${warehouse.warehouseId}',
+          "array": [,
+            "2026-04-11",
+            "2026-04-13",
+            "2026-04-14"
+          ]
+        },
+      }),
+      new Action({
+        url: '/app/state/listNoSalesDay',
+        name: '查询没有销售记录日期',
+        param: {
+          "warehouseId": '${warehouse.warehouseId}',
+          "begin": "2026-04-01",
+          "end": "2026-04-20"
+        },
+      }, {
+        check(result) {
+          let array: any[] = result.result;
+          CheckUtil.expectEqual(array.length, 3);
+
+        }
+      }),
+
+      new Action({
+        url: '/app/state/noSalesDays',
+        name: '没有销售记录日期',
+        param: {
+          "warehouseId": '${warehouse.warehouseId}',
+          "begin": "2026-04-01",
+          "end": "2026-04-20"
+        },
+
+      }, {
+        check(result) {
+          let array: any[] = result.result;
+          CheckUtil.expectEqual(array.length, 20 - 5)
+          let map = {
+            '2026-04-10': true,
+            '2026-04-11': true,
+            '2026-04-12': true,
+            "2026-04-13": true,
+            "2026-04-14": true
+          }
+          let filterArray = array.filter(row => map[row])
+          CheckUtil.expectEqual(filterArray.length, 0)
+          let row = array.find(row => row == '2026-04-20')
+          CheckUtil.expectEqual(row != null, true)
+        }
+      }),
+
+      new Action({
+        url: '/app/state/delNoSalesDay',
+        name: '删除',
+        param: {
+          "warehouseId": '${warehouse.warehouseId}',
+          "array": [,
+             
+            "2026-04-13",
+            "2026-04-14"
+          ]
+        },
+      }),
+      new Action({
+        url: '/app/state/listNoSalesDay',
+        name: '查询没有销售记录日期',
+        param: {
+          "warehouseId": '${warehouse.warehouseId}',
+          "begin": "2026-04-01",
+          "end": "2026-04-20"
+        },
+      }, {
+        check(result) {
+          let array: any[] = result.result;
+          CheckUtil.expectEqual(array.length, 1);
+
         }
       })
+
+
+
 
 
 
