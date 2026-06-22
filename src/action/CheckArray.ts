@@ -3,10 +3,9 @@ import Action from "./Action";
 
 interface Opt {
   table: string;
-  query?: any;
-  cnt?: number;
+  query?: any; 
   notWarhouseId?: boolean;
-  cntFun?(cnt:number);
+  check?(array:any[]);
 }
 function buildQuery(opt: Opt) {
   let ret: any
@@ -30,13 +29,13 @@ export default class extends Action {
   constructor(opts: Opt[]) {
     super(
       {
-        name: `验证数量:${opts.map(row => row.table).join(',')}`,
+        name: `验证数组:${opts.map(row => row.table).join(',')}`,
         url: '/free/query',
         param: {
           array: opts.map(opt => ({
             table: opt.table,
-            query: buildQuery(opt),
-            cols: ['count(*) as cnt']
+            query: buildQuery(opt) 
+            
           }))
         }
       },
@@ -46,10 +45,8 @@ export default class extends Action {
           for (let e in result) {
             let opt = opts.find(row => row.table == e);
             if (opt) {
-              if (opt.cnt != null) {
-                CheckUtil.expectEqual(result[e]?.[0].cnt, opt.cnt)
-              }else{
-                opt.cntFun(result[e]?.[0].cnt)
+              if (opt.check != null) {
+                opt.check(result[e])
               }
             }
           }

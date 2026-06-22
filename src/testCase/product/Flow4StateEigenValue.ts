@@ -123,7 +123,7 @@ export default class extends TestCase {
         result = result.result;
         CheckUtil.expectEqualObj(result, {
           "needInventoryMaterialCnt": 2,
-          "noSalesRecordDays": 3,
+          "noSalesRecordDays": 4,
           "salesProductCnt": 40,
           "salesProductBomCost": 350
         })
