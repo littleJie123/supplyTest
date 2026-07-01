@@ -17,7 +17,10 @@ export default class extends TestCase {
         price: 2,
         stockBuyUnitFee: 2
       }),
-
+      ... this.doBuildProductAndBom('东坡肉', ['猪肉'], {
+        price: 0.8,
+        stockBuyUnitFee: 1
+      }),
 
 
     ]
@@ -140,9 +143,10 @@ export default class extends TestCase {
             let content = result.result.content;
             let row = content[0];
             CheckUtil.expectEqualObj(row, {
-              "diff": 320,
-              "diffByCnt": 380,
-              "diffByPrice": -60
+
+              "diff": 304,
+              "diffByCnt": 864,
+              "diffByPrice": -560,
             })
           }
         }
@@ -196,6 +200,18 @@ export default class extends TestCase {
         product: {
           name: '红烧肉',
           id: '${product.红烧肉}'
+        },
+        salesRecord: {
+          name: this.getDate(Math.abs(day))
+        },
+        cnt: {
+          name: Math.abs(cnt)
+        }
+      },
+      {
+        product: {
+          name: '东坡肉',
+          id: '${product.东坡肉}'
         },
         salesRecord: {
           name: this.getDate(Math.abs(day))

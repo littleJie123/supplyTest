@@ -30,6 +30,9 @@ export default class extends TestCase {
         if (table.toLocaleLowerCase() == 'inventory') {
           data.inventoryDay = DateUtil.format(date);
         }
+        if(table.toLocaleLowerCase() == 'note'){
+          data.createTime = DateUtil.format(date)
+        }
         ret.push(new Action(
           {
             name: `更新第${day}天${table}数据`,
