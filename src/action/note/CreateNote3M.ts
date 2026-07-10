@@ -1,6 +1,7 @@
 import { url } from "inspector";
 import { ArrayUtil, BaseTest, HttpAction, TestCase } from "testflow";
 import Action from "../Action";
+import CheckNoteCreateTime from "./CheckNoteCreateTime";
 interface TestOpt {
   items?: any[]
   /**
@@ -26,6 +27,11 @@ interface TestOpt {
    * 不要检查
    */
   notCheck?:boolean;
+
+  /**
+   * 不检查 createTime
+   */
+  skipCheckCreateTime?: boolean;
 
   cntMap?:any
 }
@@ -82,7 +88,7 @@ export default class extends TestCase {
     this.testOpt = testOpt
   }
   protected buildActions(): BaseTest[] {
-    return [
+    const actions: BaseTest[] = [
       new CreateNote(this.testOpt),
       new Action({
         url: '/app/note/sendNote',
@@ -91,7 +97,11 @@ export default class extends TestCase {
           status: this.testOpt.sendNote?.status ?? 'normal'
         }
       })
-    ]
+    ];
+    if (!this.testOpt.skipCheckCreateTime) {
+      actions.push(new CheckNoteCreateTime());
+    }
+    return actions;
   }
 
   getName(): string {

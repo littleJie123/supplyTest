@@ -1,16 +1,17 @@
-import { BaseTest, TestCase } from "testflow";
-import ListMaterial from "../action/material/ListMaterial";
-import CreateNote3M from "../action/note/CreateNote3M";
-import PreTest from "./PreTest";
-import QueryAction from "../action/QueryAction";
-import Action from "../action/Action";
-import AddMaterial from "../action/material/AddMaterial";
-import UpdateMaterial from "../action/material/UpdateMaterial";
-import AddSupplier from "../action/supplier/AddSupplier";
-import FindLastUserId from "../action/user/FindLastUserId";
-import GetOpenId from "../action/user/GetOpenId";
-import AddWarehouse from "../action/warehouse/AddWarehouse";
-import ListSupplier from "../action/supplier/ListSupplier";
+import { BaseTest, TestCase, ArrayUtil } from "testflow";
+import ListMaterial from "../../action/material/ListMaterial";
+import CreateNote3M from "../../action/note/CreateNote3M";
+import PreTest from "../PreTest";
+import QueryAction from "../../action/QueryAction";
+import Action from "../../action/Action";
+import AddMaterial from "../../action/material/AddMaterial";
+import UpdateMaterial from "../../action/material/UpdateMaterial";
+import AddSupplier from "../../action/supplier/AddSupplier";
+import FindLastUserId from "../../action/user/FindLastUserId";
+import GetOpenId from "../../action/user/GetOpenId";
+import AddWarehouse from "../../action/warehouse/AddWarehouse";
+import ListSupplier from "../../action/supplier/ListSupplier";
+import CheckNoteCreateTime from "../../action/note/CheckNoteCreateTime";
 
 function format(date: Date): string {
 
@@ -118,10 +119,12 @@ export default class extends TestCase {
             return format(new Date(row.sysAddTime)) == getToday()
           })
           return {
-            "array": list.map(row => ({
+            array: list.map(row => ({
               noteId: row.noteId,
-              sysAddTime: beforeDay(row.sysAddTime, num)
-            }))
+              sysAddTime: beforeDay(row.sysAddTime, num),
+              createTime: beforeDay(row.sysAddTime, num)
+            })),
+            noteIds: ArrayUtil.toArray(list, 'noteId')
           }
         }
       }),
@@ -133,6 +136,9 @@ export default class extends TestCase {
           action: 'updateArray',
           array: '${array}'
         }
+      }),
+      new CheckNoteCreateTime({
+        expectDay: beforeDay(getToday(), num, true)
       })
     ]
   }

@@ -1,12 +1,12 @@
 import { BaseTest, TestCase } from "testflow";
-import PreTest from "./PreTest";
-import AddPurcharse from "../action/note/AddPurcharse";
-import ListMaterial from "../action/material/ListMaterial";
-import CreateNote3M from "../action/note/CreateNote3M";
-import ListNoteItem from "../action/noteItem/ListNoteItem";
-import ListNoteGroup from "../action/note/ListNoteGroup";
-import UpdatePurchase from "../action/note/UpdatePurchase";
-import ListNoteFromGroup from "../action/note/ListNoteFromGroup";
+import PreTest from "../PreTest";
+import AddPurcharse from "../../action/note/AddPurcharse";
+import ListMaterial from "../../action/material/ListMaterial";
+import CreateNote3M from "../../action/note/CreateNote3M";
+import ListNoteItem from "../../action/noteItem/ListNoteItem";
+import ListNoteGroup from "../../action/note/ListNoteGroup";
+import UpdatePurchase from "../../action/note/UpdatePurchase";
+import ListNoteFromGroup from "../../action/note/ListNoteFromGroup";
 
 
 export default class extends TestCase {
