@@ -1,8 +1,6 @@
-import { ArrayUtil, BaseTest, TestCase } from "testflow";
+import { ArrayUtil, BaseTest, IBaseTestOpt, TestCase } from "testflow";
 import AddMaterial from "../action/material/AddMaterial";
-import GetMaterialInfo from "../action/material/GetMaterialInfo";
 import UpdateMaterial from "../action/material/UpdateMaterial";
-import UpdateMaterial2 from "../action/material/UpdateMaterial2";
 import AddSupplier from "../action/supplier/AddSupplier";
 import ListSupplier from "../action/supplier/ListSupplier";
 import FindLastUserId from "../action/user/FindLastUserId";
@@ -12,23 +10,33 @@ import ListMaterial from "../action/material/ListMaterial";
 import Action from "../action/Action";
 import ChangeWarehouse from "../action/user/ChangeWarehouse";
 
-interface MaterialsOpt {
+/**
+ * 自定义物料：创建时必须带上初始单位（如「克」「包」），
+ * 之后若要变成多级规格，需走 /app/material/saveBuyUnit（老单位必须保留在新规格中）。
+ */
+export interface MaterialsOpt {
   name: string;
   category: '肉类' | '蛋类' | '蔬菜'
+  /** 创建时的初始单位名；不传则默认「斤」 */
+  unit?: string
+  /** 完整 buyUnit，优先于 unit */
+  buyUnit?: any[]
+  suppliers?: any[]
 }
-interface Opt {
+
+interface Opt extends IBaseTestOpt {
   materialsOpts?: MaterialsOpt[];
 }
 
 /**
- * - 创建了 餐厅、供应商、物料  
+ * - 创建了 餐厅、供应商、物料
  * - 没有供应商账号和订单
  */
 export default class extends TestCase {
 
   private preOpt: Opt;
   constructor(opt?: Opt) {
-    super();
+    super(opt);
     this.preOpt = opt
   }
   protected buildActions(): BaseTest[] {
@@ -61,50 +69,49 @@ export default class extends TestCase {
   }
 
   private buildMaterials(): BaseTest[] {
-
     let materialOpts = this.preOpt?.materialsOpts;
     if (materialOpts != null && materialOpts.length > 0) {
       let ret: BaseTest[] = []
       for (let opt of materialOpts) {
         ret.push(
           new AddMaterial(opt.name, {
-            buyUnit: [
-              { "name": "斤" }
+            buyUnit: opt.buyUnit ?? [
+              { name: opt.unit ?? '斤' }
             ],
-            categoryId: '${categoryMap.' + opt.category + '}'
+            categoryId: '${categoryMap.' + opt.category + '}',
+            suppliers: opt.suppliers
           })
         )
       }
       return ret;
-    } else {
-      return [
-
-        new AddMaterial('猪肉', {
-          buyUnit: [
-            { "name": "瓶" }, { "name": "箱", isSupplier: true, fee: 10 }
-          ],
-          categoryId: '${categoryMap.肉类}'
-        }),
-        new AddMaterial('羊肉', { categoryId: '${categoryMap.肉类}' }),
-        new UpdateMaterial('羊肉', { categoryId: '${categoryMap.肉类}' }),
-        new AddMaterial('牛肉', {
-          categoryId: '${categoryMap.肉类}',
-          suppliers: [
-            {
-              "isDef": true,
-              "supplierId": "${supplierMap.供应商2}",
-
-              "price": 10
-            }]
-        }),
-        new AddMaterial('鸡蛋', { categoryId: '${categoryMap.蛋类}' }),
-        new AddMaterial('白菜', { categoryId: '${categoryMap.蔬菜}' }),
-      ]
     }
+    return [
+      new AddMaterial('猪肉', {
+        buyUnit: [
+          { "name": "瓶" }, { "name": "箱", isSupplier: true, fee: 10 }
+        ],
+        categoryId: '${categoryMap.肉类}'
+      }),
+      new AddMaterial('羊肉', { categoryId: '${categoryMap.肉类}' }),
+      new UpdateMaterial('羊肉', { categoryId: '${categoryMap.肉类}' }),
+      new AddMaterial('牛肉', {
+        categoryId: '${categoryMap.肉类}',
+        suppliers: [
+          {
+            "isDef": true,
+            "supplierId": "${supplierMap.供应商2}",
+            "price": 10
+          }]
+      }),
+      new AddMaterial('鸡蛋', { categoryId: '${categoryMap.蛋类}' }),
+      new AddMaterial('白菜', { categoryId: '${categoryMap.蔬菜}' }),
+    ]
   }
+
   getName(): string {
     return '数据初始化'
   }
+
   needInScreen(): boolean {
     return false;
   }
@@ -118,6 +125,4 @@ export default class extends TestCase {
       }
     })
   }
-
-
 }
