@@ -22,6 +22,8 @@ export interface MaterialsOpt {
   /** 完整 buyUnit，优先于 unit */
   buyUnit?: any[]
   suppliers?: any[]
+  /** 物料编码 */
+  code?: string
 }
 
 interface Opt extends IBaseTestOpt {
@@ -79,7 +81,8 @@ export default class extends TestCase {
               { name: opt.unit ?? '斤' }
             ],
             categoryId: '${categoryMap.' + opt.category + '}',
-            suppliers: opt.suppliers
+            suppliers: opt.suppliers,
+            code: opt.code
           })
         )
       }

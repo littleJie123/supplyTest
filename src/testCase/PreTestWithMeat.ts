@@ -24,9 +24,9 @@ export default class extends TestCase {
     return [
       new PreTest({
         materialsOpts: [
-          { name: '羊肉', category: '肉类', unit: '克' },
-          { name: '牛肉', category: '肉类', unit: '包' },
-          { name: '猪肉', category: '肉类', unit: '克' }
+          { name: '羊肉', category: '肉类', unit: '克', code: 'MAT001' },
+          { name: '牛肉', category: '肉类', unit: '包', code: 'MAT002' },
+          { name: '猪肉', category: '肉类', unit: '克', code: 'MAT003' }
         ]
       }),
       this.buildSaveBuyUnit('羊肉'),

@@ -5,6 +5,8 @@ interface Opt {
   suppliers?: any[]
   type?: WarehouseType
   categoryId?: number | string;
+  /** 物料编码 */
+  code?: string;
 }
 function createParam(name: string, opt?: Opt): IHttpActionParam {
 
@@ -13,6 +15,7 @@ function createParam(name: string, opt?: Opt): IHttpActionParam {
     name: '增加商品：' + name,
     url: '/app/material/SaveMaterial',
     param: {
+      "code": opt?.code,
       "buyUnit": opt?.buyUnit ?? [
         { "isSupplier": true, "name": "瓶", "fee": 1 }
       ],

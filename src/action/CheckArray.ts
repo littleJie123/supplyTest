@@ -3,22 +3,25 @@ import Action from "./Action";
 
 interface Opt {
   table: string;
-  query?: any; 
+  query?: any;
+  /** 查询不加 warehouseId（表无该字段时用） */
   notWarhouseId?: boolean;
-  check?(array:any[]);
+  /** 查询不加 warehouseGroupId（如 buyUnit、units 无该字段） */
+  notWarehouseGroupId?: boolean;
+  check?(array: any[]);
 }
 function buildQuery(opt: Opt) {
   let ret: any
   if (opt?.query != null) {
-    ret = opt.query
-    ret.warehouseGroupId = '${warehouse.warehouseGroupId}'
+    ret = { ...opt.query }
   } else {
-    ret = {
-      warehouseGroupId: '${warehouse.warehouseGroupId}'
-    }
+    ret = {}
     if (!opt?.notWarhouseId) {
       ret.warehouseId = '${warehouse.warehouseId}';
     }
+  }
+  if (!opt?.notWarehouseGroupId) {
+    ret.warehouseGroupId = '${warehouse.warehouseGroupId}'
   }
   if (ret.isDel == null) {
     ret.isDel = 0;
@@ -34,8 +37,8 @@ export default class extends Action {
         param: {
           array: opts.map(opt => ({
             table: opt.table,
-            query: buildQuery(opt) 
-            
+            query: buildQuery(opt)
+
           }))
         }
       },
