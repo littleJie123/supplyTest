@@ -61,11 +61,16 @@ export default class extends TestCase {
       }, {
         check(result) {
           result = result.result.result;
+          // 口径（与 stockRecord FIFO 一致）：
+          // 期初：100天前入库 5物料*10*3 = 150
+          // 期间入库：10天前 +50；退货1份/物料按 FIFO 扣最旧@3 → -15；8天前 +100 ⇒ instockAmount=135
+          // 盘点 29→24：processSet 只动最旧批次，5*5@3=75 ⇒ amount=75
+          // 期末：150+135-75=210
           CheckUtil.expectEqualObj(result, {
-            "openningAmount": 150,
+            "openingAmount": 150,
             "endAmount": 210,
-            "amount": 85,
-            "instockAmount": 145,
+            "amount": 75,
+            "instockAmount": 135,
           })
         },
       })
