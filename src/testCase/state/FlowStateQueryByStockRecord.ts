@@ -266,7 +266,7 @@ class CheckAnalyseSupplier extends Action {
   constructor() {
     super({
       name: 'analyseSupplier',
-      remark: '供应商1入库600；盘点期初落在门店自操作',
+      remark: '供应商1入库600；仅期初的门店自操作不返回',
       url: '/app/state/analyseSupplier',
       param: {
         warehouseId: '${warehouse.warehouseId}',
@@ -282,13 +282,10 @@ class CheckAnalyseSupplier extends Action {
         CheckUtil.expectEqual(supplierRow.instockAmount, 600, '供应商1入库');
         CheckUtil.expectEqual(supplierRow.useAmount, 0, '供应商1耗用');
 
+        // 盘点期初落在「门店自操作」，但接口只返回有入库/退货的维度，故不应出现
         let selfRow = content.find(r => r.name === '门店自操作');
-        if (selfRow != null) {
-          CheckUtil.expectEqual(selfRow.openingAmount, 600, '门店自操作期初（盘点）');
-        }
-        let openingSum = content.reduce((s, r) => s + Number(r.openingAmount ?? 0), 0);
+        CheckUtil.expectEqual(selfRow == null, true, '仅期初的门店自操作不应出现');
         let instockSum = content.reduce((s, r) => s + Number(r.instockAmount ?? 0), 0);
-        CheckUtil.expectEqual(openingSum, 600, '供应商维度期初合计');
         CheckUtil.expectEqual(instockSum, 600, '供应商维度入库合计');
       }
     });

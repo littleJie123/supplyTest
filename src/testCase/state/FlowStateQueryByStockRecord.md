@@ -10,12 +10,12 @@
 6. 调用 `/app/state/stateMaterial`（begin/end=2026-07-01~07-31）：每个物料期初200、入库200、耗用0、期末400
 7. 调用 `/app/state/listStateWarehouse`：2026-07-01 行期初600、入库600、耗用 amount=0、期末1200（同时有 `day`/`date`）
 8. 调用 `/app/state/analyseCategory`：分类「肉类」期初600、入库600、耗用0、期末1200
-9. 调用 `/app/state/analyseSupplier`：供应商1入库600；盘点期初一般在「门店自操作」；各供应商 opening/instock 合计分别为600
+9. 调用 `/app/state/analyseSupplier`：供应商1入库600；仅有盘点期初的「门店自操作」不返回；入库合计600
 10. 调用 `/app/state/stateWarehouse`：仓库汇总与上列一致（期初600、入库600、耗用0、期末1200）
 
 # 注意点
 - 统计区间不依赖 `stateMaterial` 表读数，直接聚合 `stockRecord`；但历史盘点写入后仍依赖 **Recal** 把流水算完整
 - 区间内无销售/盘点/报损，故耗用为0；期末=期初+入库
-- 供应商维度：订单入库挂供应商1；盘点批次通常 `supplierId=0`（展示名「门店自操作」）
+- 供应商维度：订单入库挂供应商1；盘点批次通常 `supplierId=0`（展示名「门店自操作」），但 analyseSupplier **只返回有入库/退货的维度**，故门店自操作不出现
 - 改订单时间用 `/app/note/updateNoteTime`，不要用 `/free/update`
 - 每个 Action / 嵌套 TestCase 都有 remark
