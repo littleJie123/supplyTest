@@ -337,7 +337,7 @@ export default class extends TestCase {
         name: '验证手动单',
         url: '/app/note/listNote',
         query: {
-          status: "statement"
+          status: "instocked"
         }
       }, {
         buildVariable(result) {

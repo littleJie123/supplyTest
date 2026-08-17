@@ -221,6 +221,41 @@ export default class extends TestCase {
     }))
 
     ret.push(new Action({
+      url: '/app/bill/setBillStatus',
+      name: '取消对账',
+      param: {
+        billId: '${billId}',
+        status: 'normal'
+      }
+    }).setRemark('setBillStatus 把账单从 confirm 改回 normal，对应前端「取消对账」'))
+
+    ret.push(new Action({
+      url: '/app/bill/listBill',
+      name: '验证取消对账-账单',
+      param: {
+      }
+    }, {
+      check(result) {
+        let bill = result.result.content[0]
+        CheckUtil.expectEqual(bill.status, 'normal', `取消对账后账单应为normal,实际=${bill.status}`)
+      }
+    }).setRemark('listBill：账单 status=normal'))
+
+    ret.push(new Action({
+      url: '/app/note/listNote',
+      name: '验证取消对账-订单',
+      param: {
+        billId: '${billId}'
+      }
+    }, {
+      check(result) {
+        let content: any[] = result.result.content;
+        content = content.filter(row => row.status != 'instocked')
+        CheckUtil.expectEqual(content.length, 0, '取消对账后账单内订单应全部回到 instocked')
+      }
+    }).setRemark('listNote：该账单下订单 status 全部为 instocked'))
+
+    ret.push(new Action({
       url: '/app/noteItem/listNoteItem',
       name: '查询订单物料',
       param: {

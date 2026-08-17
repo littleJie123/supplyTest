@@ -5,7 +5,7 @@ interface ItemChange {
   name: string;
   price?: number;
   stockBuyUnitFee?: number;
-  /** 不传则不改入库数量 */
+  /** 不传则不改入库数量；传入时按采购单位(stockUnitsId)数量，服务端 parseInstockCnt 换算 */
   instockCnt?: number;
 }
 
@@ -47,6 +47,7 @@ export default class extends HttpAction {
           item.stockBuyUnitFee = change.stockBuyUnitFee ?? row.stockBuyUnitFee;
         }
         if (change.instockCnt != null) {
+          // 不传 buyUnitFee：模拟客户端；服务端用库里 buyUnitFee 做 parseInstockCnt 目标
           item.instockCnt = change.instockCnt;
         }
         return item;
