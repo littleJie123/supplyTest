@@ -1,4 +1,4 @@
-import { ArrayUtil, BaseTest, CheckUtil, TestCase } from "testflow";
+import { ArrayUtil, BaseTest, CheckUtil, DownloadExcelAction, TestCase } from "testflow";
 import PreTest from "../PreTest";
 import Action from "../../action/Action";
 import Recal from "../../action/Recal";
@@ -13,7 +13,7 @@ import path from "path";
 
 /**
  * 牛肉完整周期：6/30 按包盘点，再改规格 1包=100g，随后按克进货、按包销售、订单入库、退货、7/31 再盘点，
- * 最后 updatePrice 改 7/4 入库量价，改价前后各打一次 analysyMaterial。
+ * 最后 updatePrice 改 7/4 入库量价，改价前后各打一次 analysyMaterial，末尾再下 psi。
  * 详见同目录 FlowDatas.md。
  *
  * FIFO（标准单位=包；克用 buyUnitFee=100）：
@@ -35,7 +35,7 @@ import path from "path";
  */
 export default class extends TestCase {
   constructor() {
-    super({ remark: '完整周期：6/30盘点→改规格→手工入库→销售→订单入库→退货→7/31盘点→改价改量' })
+    super({ remark: '完整周期：6/30盘点→改规格→手工入库→销售→订单入库→退货→7/31盘点→改价改量→psi' })
   }
 
   getName(): string {
@@ -165,6 +165,8 @@ export default class extends TestCase {
         diffByPrice: 1000,
         compareWith: 'firstAnalysy'
       }, variable),
+
+      this.buildPsiCheck()
     ]
   }
 
@@ -217,6 +219,52 @@ export default class extends TestCase {
         let beefId = variable.materialMap?.牛肉?.materialId
         return {
           [opt.saveAs]: content.find((r: any) => String(r.materialId) === String(beefId))
+        }
+      }
+    })
+  }
+
+  /**
+   * 进销存 7/1~7/31（改价后）。数量按默认采购单位「包」。
+   * 期初=6/30盘点 0.5包/50；采购=手工5包/1000+订单3包/1200−退货1包/200；
+   * 出库=销售3包/550+盘亏3.5包/1100；期末=1包/400。
+   */
+  private buildPsiCheck(): BaseTest {
+    let expect = {
+      '规格': '1包=100克',
+      '期初数量': 0.5, '期初金额': 50, '期初价格': 100,
+      '采购数量': 7, '采购金额': 2000, '采购单价': 285.71,
+      '出库数量': 6.5, '出库金额': 1650, '出库单价': 253.84,
+      '期末数量': 1, '期末金额': 400, '期末单价': 400
+    }
+    let sumExpects = {
+      '期初金额': 50, '采购金额': 2000, '出库金额': 1650, '期末金额': 400
+    }
+    return new DownloadExcelAction({
+      name: '进销存excel校验',
+      remark: '下载 psi excel（7/1~7/31，改价后），核对牛肉行与汇总金额',
+      url: '/app/state/psi',
+      sheetName: '进销存',
+      param: {
+        begin: '2026-07-01',
+        end: '2026-07-31',
+        warehouseId: '${warehouse.warehouseId}',
+        warehouseGroupId: '${warehouse.warehouseGroupId}'
+      }
+    }, {
+      check(rows: any[]) {
+        CheckUtil.expectEqual(rows.length, 2, `进销存行数应为1物料+1汇总，实际${rows.length}`)
+        let row = rows.find(r => r['物料名称'] == '牛肉')
+        CheckUtil.expectEqual(row != null, true, '进销存缺少牛肉行')
+        for (let col in expect) {
+          CheckUtil.expectEqual(row[col], expect[col],
+            `进销存:牛肉.${col}，期望${expect[col]}，实际${row?.[col]}`)
+        }
+        let sumRow = rows.find(r => r['物料名称'] == '汇总')
+        CheckUtil.expectEqual(sumRow != null, true, '进销存缺少汇总行')
+        for (let col in sumExpects) {
+          CheckUtil.expectEqual(sumRow[col], sumExpects[col],
+            `进销存:汇总.${col}，期望${sumExpects[col]}，实际${sumRow?.[col]}`)
         }
       }
     })

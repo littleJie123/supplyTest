@@ -7,7 +7,7 @@ interface TestOpt {
 }
 
 function getName(opt: TestOpt) {
-  return opt?.name ?? "__test"
+  return opt?.name ?? "${openid}"
 }
 function create(opt: TestOpt): IHttpActionParam {
   return {

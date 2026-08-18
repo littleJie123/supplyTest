@@ -3,15 +3,14 @@ import { BaseTest, UrlAction } from "testflow";
 export default class  extends UrlAction {
   
   protected getHttpUrl(): string {
-    return '/free/findLastUser'
+    return '/free/findMaxTestUser'
   }
    
   protected buildVariable(result: any) {
     let openid:string = result.result.openid
-    let num = openid.substring('_test'.length);
-
+    
     return {
-      openid:`_test${parseInt(num) + 1}`,  
+      openid:`_test${openid + 1}`,  
     }
   }
   
