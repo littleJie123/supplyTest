@@ -3,7 +3,7 @@
 
 # 测试步骤
 1. **前置**：`PreTest` 仅创建牛肉（初始单位「包」）
-2. **7月1日手工入库**：`createHandInstock`，牛肉 **10包 / 1000元**（`cnt=10, buyUnitFee=1`，100元/包），`salesDay=2026-07-01`
+2. **7月1日手工入库**：`createHandInstock`，牛肉 **10包 / 1000元**（`cnt=10, buyUnitFee=1`，100元/包），`salesDay=2026-07-01`；随后 `Recal`
 3. **7月2日盘点**：`setInventoryByArray`，牛肉 **2包**（`cnt=2, buyUnitFee=1`）。盘点忽略输入成本，按入库批次单价回填
 4. **重算后检查库存**：`Recal` → `CheckStock` 数量 2 包 → `CheckArray` 金额 200（盘亏 8 包，按 100元/包）
 5. **删除7月2日盘点**：`delInventoryByInventoryDay`，`inventoryDay=2026-07-02`

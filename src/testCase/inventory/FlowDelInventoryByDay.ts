@@ -50,6 +50,7 @@ export default class extends TestCase {
           }]
         }
       }),
+      new Recal().setRemark('手工入库后重算'),
 
       new Action({
         name: '7月2日盘点成2包',
