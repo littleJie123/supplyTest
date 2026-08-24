@@ -5,14 +5,14 @@
 1. 引用 `PreTest`（餐厅、供应商1/2、猪肉/羊肉/牛肉等）。
 2. 调 `schStallMaterialInfo4Purcharse`：尚无订货 → `content` 为空、`money=0`。
 3. `addPurcharse` 仅牛肉：`cnt=50`、`buyUnitFee=1`。
-4. 再查订货数据：1 条；`stock` 为 50/1；有 `supplierMaterial`、有 `buyUnit`；无 `supplier`（`noSupplier`）、无 `stallStocks`；`money=500`（单价 10）。
+4. 再查订货数据：1 条；`name=牛肉`；`stock` 为 50/1；有 `supplierMaterial`、有 `buyUnit`；`supplier.name=供应商2`（结构同 listMaterialByCategory）、无 `stallStocks`；`money=500`（单价 10）。
 5. 再订猪肉（400/1）、羊肉（30/500）。
-6. 再查：3 条，数量与步骤一致；`money` 按返回的 `stock`+`supplierMaterial` 用与服务端相同的 fee 换算后合计。
+6. 再查：3 条，数量与步骤一致；行上有物料 `name` 和 `supplier.name`（牛肉=供应商2，猪肉/羊肉=供应商1）；`money` 按返回的 `stock`+`supplierMaterial` 用与服务端相同的 fee 换算后合计。
 7. `CreateNote3M`（createNote → sendNote）：发送时清空对应物料的订货暂存。
 8. 再查：`content` 为空、`money=0`。
 
 # 注意点
 - 接口必参仅 `warehouseId`；用例用 `Action` 顺带带上 `warehouseGroupId`。
-- 行上无 `name`（`MaterialAndUnitsHat` 传了 `noSchMaterial`），断言用 `materialMap` 的 `materialId`。
-- `SupplierMaterialHat` 传了 `noSupplier`，校验不要期望 `supplier` 对象。
+- 物料名在行上扁平字段 `name`（与 `listMaterialByCategory` 一致）；定位仍可用 `materialMap` 的 `materialId`。
+- 供应商名在 `supplier.name`（`SupplierMaterialHat.findSupplier`，结构同 `listMaterialByCategory` 的 `supplier`）。
 - `money` 用 `StockDomain.calMoney` 逻辑（fee 正除负乘），测试里用同规则从返回行重算，避免写死易碎金额。

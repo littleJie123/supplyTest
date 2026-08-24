@@ -39,7 +39,7 @@ export default class extends TestCase {
       }).setRemark('订货：牛肉 50（单价 10，预期 money=500）'),
 
       this.buildSchAction({
-        remark: '仅牛肉：1 条、stock/供应商价、money=500，无 supplier/stallStocks',
+        remark: '仅牛肉：1 条、name/stock/供应商价、money=500，有 supplier.name、无 stallStocks',
         name: '查询订货-仅牛肉',
         check(result) {
           const content = result?.result?.content ?? [];
@@ -47,11 +47,13 @@ export default class extends TestCase {
           const beefId = variable.materialMap?.牛肉?.materialId;
           const row = content.find((r: any) => r.materialId === beefId);
           CheckUtil.expectEqual(row != null, true, `未找到牛肉 materialId=${beefId}`);
+          CheckUtil.expectEqual(row.name, '牛肉', `物料名应为牛肉，实际=${row.name}`);
           CheckUtil.expectEqual(row.stock?.cnt, 50, `牛肉 cnt 应为 50，实际=${row.stock?.cnt}`);
           CheckUtil.expectEqual(row.stock?.buyUnitFee, 1, `牛肉 buyUnitFee 应为 1`);
           CheckUtil.expectEqual(row.supplierMaterial != null, true, '应有 supplierMaterial');
           CheckUtil.expectEqual(row.supplierMaterial?.price, 10, `牛肉默认价 10，实际=${row.supplierMaterial?.price}`);
-          CheckUtil.expectEqual(row.supplier == null, true, 'noSupplier 时不应挂 supplier');
+          CheckUtil.expectEqual(row.supplier?.name, '供应商2', `供应商名应为供应商2，实际=${row.supplier?.name}`);
+          CheckUtil.expectEqual(row.supplier?.supplierId, variable.supplierMap?.供应商2, 'supplier.supplierId 应与供应商2一致');
           CheckUtil.expectEqual(row.stock?.stallStocks == null, true, '应删除 stallStocks');
           CheckUtil.expectEqual(Array.isArray(row.buyUnit), true, '应挂 buyUnit 规格');
           CheckUtil.expectEqual(result?.result?.money, 500, `money 应为 500，实际=${result?.result?.money}`);
@@ -75,10 +77,10 @@ export default class extends TestCase {
           const content = result?.result?.content ?? [];
           CheckUtil.expectEqual(content.length, 3, `应 3 条，实际=${content.length}`);
 
-          const expectStocks: Record<string, { cnt: number; buyUnitFee: number }> = {
-            牛肉: { cnt: 50, buyUnitFee: 1 },
-            猪肉: { cnt: 400, buyUnitFee: 1 },
-            羊肉: { cnt: 30, buyUnitFee: 500 }
+          const expectStocks: Record<string, { cnt: number; buyUnitFee: number; supplier: string }> = {
+            牛肉: { cnt: 50, buyUnitFee: 1, supplier: '供应商2' },
+            猪肉: { cnt: 400, buyUnitFee: 1, supplier: '供应商1' },
+            羊肉: { cnt: 30, buyUnitFee: 500, supplier: '供应商1' }
           };
           let expectMoney = 0;
           for (const name of Object.keys(expectStocks)) {
@@ -86,10 +88,12 @@ export default class extends TestCase {
             const row = content.find((r: any) => r.materialId === materialId);
             CheckUtil.expectEqual(row != null, true, `未找到${name} materialId=${materialId}`);
             const expect = expectStocks[name];
+            CheckUtil.expectEqual(row.name, name, `${name} 物料名应为 ${name}，实际=${row.name}`);
             CheckUtil.expectEqual(row.stock?.cnt, expect.cnt, `${name} cnt 应为 ${expect.cnt}`);
             CheckUtil.expectEqual(row.stock?.buyUnitFee, expect.buyUnitFee, `${name} buyUnitFee 应为 ${expect.buyUnitFee}`);
             CheckUtil.expectEqual(row.supplierMaterial != null, true, `${name} 应有 supplierMaterial`);
-            CheckUtil.expectEqual(row.supplier == null, true, `${name} 不应有 supplier`);
+            CheckUtil.expectEqual(row.supplier?.name, expect.supplier, `${name} 供应商名应为 ${expect.supplier}，实际=${row.supplier?.name}`);
+            CheckUtil.expectEqual(row.supplier?.supplierId, variable.supplierMap?.[expect.supplier], `${name} supplier.supplierId 应与${expect.supplier}一致`);
             CheckUtil.expectEqual(row.stock?.stallStocks == null, true, `${name} 应无 stallStocks`);
             expectMoney += calMoneyLikeServer(row.stock, row.supplierMaterial);
           }
