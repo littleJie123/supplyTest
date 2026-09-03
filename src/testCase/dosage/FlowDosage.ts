@@ -22,7 +22,7 @@ function findSupplier(content: any[], name: string) {
 
 function checkOrder(row: any, opt: {
   orderType: string;
-  orderDay: number;
+  orderDay: string;
   daysInTransit: number;
 }, label: string) {
   CheckUtil.expectEqual(
@@ -58,7 +58,7 @@ export default class extends TestCase {
           supplierId: '${supplierMap.供应商1}',
           name: '供应商1',
           orderType: 'week',
-          orderDay: 1,
+          orderDay: '1',
           daysInTransit: 1
         }
       }),
@@ -75,7 +75,7 @@ export default class extends TestCase {
           const supplier = findSupplier(result.result.content, '供应商1');
           checkOrder(supplier, {
             orderType: 'week',
-            orderDay: 1,
+            orderDay: '1',
             daysInTransit: 1
           }, '供应商1');
         }
@@ -98,7 +98,7 @@ export default class extends TestCase {
             supplierId: '${supplierMap.供应商1}',
             price: 10,
             orderType: 'month',
-            orderDay: 5,
+            orderDay: '5',
             daysInTransit: 2
           }],
           safeStock: {
@@ -150,12 +150,12 @@ export default class extends TestCase {
           }
           checkOrder(material.supplierMaterial, {
             orderType: 'month',
-            orderDay: 5,
+            orderDay: '5',
             daysInTransit: 2
           }, 'supplierMaterial');
           checkOrder(material.supplier, {
             orderType: 'week',
-            orderDay: 1,
+            orderDay: '1',
             daysInTransit: 1
           }, 'supplier');
           CheckUtil.expectEqual(material.safeStock?.cnt, 10, 'safeStock.cnt');
@@ -180,7 +180,7 @@ export default class extends TestCase {
             supplierId: '${supplierMap.供应商1}',
             price: 10,
             orderType: 'day',
-            orderDay: 0,
+            orderDay: '0',
             daysInTransit: 0
           }],
           safeStock: {
@@ -210,7 +210,7 @@ export default class extends TestCase {
           const material = findMaterial(result.result.content, MATERIAL_NAME);
           checkOrder(material.supplierMaterial, {
             orderType: 'day',
-            orderDay: 0,
+            orderDay: '0',
             daysInTransit: 0
           }, 'supplierMaterial');
           CheckUtil.expectEqual(material.safeStock?.cnt, 10, 'safeStock.cnt');
@@ -233,7 +233,7 @@ export default class extends TestCase {
           warehouseGroupId: '${warehouse.warehouseGroupId}',
           type: 'supplier',
           orderType: 'month',
-          orderDay: 10,
+          orderDay: '10',
           daysInTransit: 0
         }
       }),
@@ -250,7 +250,7 @@ export default class extends TestCase {
           const supplier = findSupplier(result.result.content, '供应商千元用量');
           checkOrder(supplier, {
             orderType: 'month',
-            orderDay: 10,
+            orderDay: '10',
             daysInTransit: 0
           }, '供应商千元用量');
         }

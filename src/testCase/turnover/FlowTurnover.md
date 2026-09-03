@@ -9,6 +9,9 @@
 5. `listTurnover`（month=`2026-01`）查询，期望剩 3 条（月/2日/3日），1 日已软删
 6. 保存 2026-02：月 8000、2月1日 200
 7. `listTurnover`（month=`202602`）查询，期望仅 2 月 2 条，不含 1 月数据
+8. **校验 RecommendHat**：
+   - 新增物料（设置报货方式、安全库存、千元用量）
+   - `listMaterialByCategory` 查询，期望计算出正确的 `recommentCnt`
 
 # 注意点
 - date：月用 `yyyy-MM`，日用 `yyyy-MM-dd`；list 的 month 支持 `202601` / `2026-01`

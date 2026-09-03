@@ -5,6 +5,8 @@ interface Opt {
     suppliers?: any[];
     type?: WarehouseType;
     categoryId?: number | string;
+    /** 物料编码 */
+    code?: string;
 }
 export default class extends HttpAction {
     constructor(name: any, opt?: Opt);

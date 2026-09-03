@@ -3,13 +3,12 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const testflow_1 = require("testflow");
 class default_1 extends testflow_1.UrlAction {
     getHttpUrl() {
-        return '/free/findLastUser';
+        return '/free/findMaxTestUser';
     }
     buildVariable(result) {
         let openid = result.result.openid;
-        let num = openid.substring('_test'.length);
         return {
-            openid: `_test${parseInt(num) + 1}`,
+            openid: `_test${openid + 1}`,
         };
     }
     getName() {

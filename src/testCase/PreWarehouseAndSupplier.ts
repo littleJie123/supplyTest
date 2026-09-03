@@ -90,11 +90,11 @@ export default class extends TestCase {
       }),
       new ChangeWarehouse2Supplier(),
       new Action({
-        url: '/share/linkNote',
+        url: '/app/note/linkNote',
         name: '接单',
         param: {
           warehouseId: "${supplierWarehouse.warehouseId}",
-          shareDataNo: "${shareDataNo}",
+          _shareDataNo: "${shareDataNo}",
         }
 
       }, {

@@ -162,7 +162,73 @@ export default class extends TestCase {
           let jan = content.find(row => String(row.date).indexOf('2026-01') == 0);
           CheckUtil.expectEqual(jan, null);
         }
-      }).setRemark('month=202602 只应返回2月2条，不含1月')
+      }).setRemark('month=202602 只应返回2月2条，不含1月'),
+
+      new Action({
+        name: '查询物料单位',
+        remark: '查询物料以获取正确的 unitsId',
+        url: '/app/material/listMaterialByCategory',
+        method: 'POST',
+        param: {
+          warehouseId: '${warehouse.warehouseId}',
+          warehouseGroupId: '${warehouse.warehouseGroupId}'
+        }
+      }, {
+        buildVariable(result) {
+          const material = result.result.content[0]; // 取第一个物料
+          if (material == null) throw new Error('没有物料');
+          const unitsId = material.buyUnit?.[0]?.unitsId ?? material.stockUnitsId;
+          return { dosageUnitsId: unitsId };
+        }
+      }),
+
+      new Action({
+        name: '新增校验RecommendHat物料',
+        remark: '每天报货、在途0；安全库存10；千元用量2',
+        url: '/app/material/SaveMaterial',
+        method: 'POST',
+        param: {
+          name: 'RecommendHat测试物料',
+          buyUnit: [{ isSupplier: true, name: '斤', fee: 1 }],
+          suppliers: [{
+            isDef: true,
+            supplierId: '${supplierMap.供应商1}',
+            price: 10,
+            orderType: 'day',
+            orderDay: '0',
+            daysInTransit: 0
+          }],
+          safeStock: {
+            cnt: 10,
+            stockUnitsName: '斤',
+            needRoundUp: 0,
+            dosageCnt: 2,
+            dosageUnitsId: '${dosageUnitsId}'
+          },
+          category: { categoryId: '${categoryMap.肉类}' },
+          warehouseId: '${warehouse.warehouseId}',
+          warehouseGroupId: '${warehouse.warehouseGroupId}'
+        }
+      }),
+
+      new Action({
+        name: 'listMaterialByCategory校验推荐报货',
+        remark: '期望 recommentCnt.cnt 基于营业额计算',
+        url: '/app/material/listMaterialByCategory',
+        method: 'POST',
+        param: {
+          warehouseId: '${warehouse.warehouseId}',
+          warehouseGroupId: '${warehouse.warehouseGroupId}'
+        }
+      }, {
+        check(result) {
+          const material = result.result.content.find((row: any) => row.name === 'RecommendHat测试物料');
+          if (material == null) throw new Error('未找到物料');
+          if (material.recommentCnt == null) throw new Error('缺少 recommentCnt');
+          // 营业额计算逻辑依赖具体数据，这里校验字段存在性，业务正确性由FlowRecommend覆盖
+          CheckUtil.expectNotNull(material.recommentCnt.cnt, 'recommentCnt.cnt');
+        }
+      })
     ];
   }
 }

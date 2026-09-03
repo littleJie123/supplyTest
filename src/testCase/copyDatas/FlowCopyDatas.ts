@@ -12,7 +12,7 @@ const COPY_TABLES = [
   'supplier',
   'supplierMaterial',
   'stall',
-  'stallMaterialInfo',
+  'stallMaterial',
   'otherType',
   'otherUse',
   'otherItem',
@@ -34,7 +34,7 @@ const MATERIAL_NAMES = ['猪肉', '羊肉', '牛肉', '鸡蛋', '白菜'];
  */
 export default class extends TestCase {
   constructor() {
-    super({ remark: '复制数据：源仓造物料供应商档口餐品BOM销售订单盘点其他消耗→同步→list接口校验' });
+    super({ remark: '复制数据：源仓造数→先同步units/buyUnit→再insertCopyDatas(带srcEnv)→list接口校验' });
   }
 
   getName(): string {
@@ -74,6 +74,7 @@ export default class extends TestCase {
           );
         }
       }),
+      new CopyGlobalTables(),
       new CopyAllTables(),
       new VerifyByListApi()
     ];
@@ -313,9 +314,26 @@ class CreateAndInstockNote extends TestCase {
   }
 }
 
+class CopyGlobalTables extends TestCase {
+  constructor() {
+    super({ remark: '先同步全局单位和规格：submitCopyDatas 查 units/buyUnit，再 insertUnitsCopyDatas、insertBuyUnitDatas' });
+  }
+
+  getName(): string {
+    return '同步全局units和buyUnit';
+  }
+
+  protected buildActions(): BaseTest[] {
+    return [
+      new SubmitCopyDatas('units', false, 'insertUnitsCopyDatas'),
+      new SubmitCopyDatas('buyUnit', false, 'insertBuyUnitDatas')
+    ];
+  }
+}
+
 class CopyAllTables extends TestCase {
   constructor() {
-    super({ remark: '按表循环调用 submitCopyDatas，直到每张表 isFinish' });
+    super({ remark: '按业务表循环：submitCopyDatas 查询，再 insertCopyDatas（带 srcEnv）插入，直到每张表 isFinish' });
   }
 
   getName(): string {
@@ -323,7 +341,7 @@ class CopyAllTables extends TestCase {
   }
 
   protected buildActions(): BaseTest[] {
-    return COPY_TABLES.map(tableName => new SubmitCopyDatas(tableName));
+    return COPY_TABLES.map((tableName, i) => new SubmitCopyDatas(tableName, i === 0));
   }
 }
 

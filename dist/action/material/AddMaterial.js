@@ -8,6 +8,7 @@ function createParam(name, opt) {
         name: '增加商品：' + name,
         url: '/app/material/SaveMaterial',
         param: {
+            "code": opt === null || opt === void 0 ? void 0 : opt.code,
             "buyUnit": (_a = opt === null || opt === void 0 ? void 0 : opt.buyUnit) !== null && _a !== void 0 ? _a : [
                 { "isSupplier": true, "name": "瓶", "fee": 1 }
             ],

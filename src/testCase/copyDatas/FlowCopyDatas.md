@@ -13,9 +13,12 @@
 3. 注册目标仓库「复制目标仓」（`AddWarehouse`，`variableType=warehouse2`），得到**新的** `warehouseGroupId`。
 4. 保存用户 token；生成本次复制的 `copyNo`。
 5. 管理员登录。
-6. 请求 `/admin/copyDatas/getCopyTables`，校验返回表列表为：category、material、supplier、supplierMaterial、stall、stallMaterialInfo、otherType、otherUse、otherItem、product、bom、salesRecord、note、noteItem、inventory、stock、stockRecord。
-7. 按表循环调用 `/admin/copyDatas/submitCopyDatas`（源=`warehouse`，目标=`warehouse2`）；每张表直到 `isFinish=true`。外键在 copy_datas 查不到时 status=fail。
-8. 恢复用户 token，切换到目标仓，用 list 接口校验：
+6. 请求 `/admin/copyDatas/getCopyTables`，校验返回表列表为：category、material、supplier、supplierMaterial、stall、stallMaterial、otherType、otherUse、otherItem、product、bom、salesRecord、note、noteItem、inventory、stock、stockRecord。
+7. 同步全局单位/规格（`copyDatas.copyNo` 为 `srcEnv`，本用例与当前环境相同）：
+   1. `submitCopyDatas(units)` → `/free/copyDatas/insertUnitsCopyDatas`（已有映射跳过，否则 `getByNames` 查/建）。
+   2. `submitCopyDatas(buyUnit)` → `/free/copyDatas/insertBuyUnitDatas`（先按 units 映射换 `unitsIds`，再 `getByUnitsIdsAndFees`）。
+8. 按业务表循环：先调 `/admin/copyDatas/submitCopyDatas` 查询源仓数据，再调 `/free/copyDatas/insertCopyDatas` 插入目标仓（`warehouse2`，带 `srcEnv`）；第一次插入带 `checkEmptyBrand=true`（目标品牌已有物料则失败）；每批插入后调 `/admin/copyResult/addResult` 追加记录（copyNo 为本轮 uuid，message 含源/目标环境和 warehouseId）；每张表直到 `isFinish=true`。外键在 copy_datas 查不到时插入失败。`srcEnv` 等于当前环境时，`unitsId` / `buyUnitId` / `stockUnitsId` 保持不变；不同则按 `copyNo=srcEnv` 从 copyDatas 换新 id（`stockUnitsId` 按 units 查）。
+9. 恢复用户 token，切换到目标仓，用 list 接口校验：
    - `listsupplier`：有供应商1、供应商2
    - `listSupplierMaterial4Supplier`：供应商2 有物料报价
    - `listStall`：有档口A
@@ -33,7 +36,9 @@
 
 # 注意点
 - 目标必须是**新品牌**（新 `warehouseGroupId`）。同一品牌下复制会把 category/material 再插一遍，名称可能冲突。
-- 生产环境不能作为目标；`submitCopyDatas` 的 `target.env` 用当前测试环境（local / test）。
-- 复制：`getCopyTables`、`submitCopyDatas` 都走运营平台；源环境只能是当前环境。校验前要切回用户 token 并 `changeWarehouse` 到目标仓，list 入参显式带 `warehouse2` 的 id。
+- 生产环境不能作为目标。
+- 复制：`getCopyTables`、`submitCopyDatas` 走运营平台（当前环境查询）；`insertUnitsCopyDatas` / `insertBuyUnitDatas` / `insertCopyDatas` 打目标环境。`getCopyTables` 不含 units、buyUnit，这两张全局表单独先同步。
+- `insertCopyDatas` 必须带 `srcEnv`。`stockUnitsId` 存的是 unitsId，跨环境时按 `tableName=units` 查 copyDatas。
+- 校验前要切回用户 token 并 `changeWarehouse` 到目标仓，list 入参显式带 `warehouse2` 的 id。
 - `stockRecord.noteItemId` 不能按字段名推断表：`inventory`→盘点、`noteItem`→订单明细、`other_item`→其他消耗明细、`product`→餐品。
-- 每个 TestCase / Action 都有 `remark`。源仓造数、同步所有表、list 校验都是嵌套 TestCase；只有 1 个 Action 的步骤不包 TestCase。
+- 每个 TestCase / Action 都有 `remark`。源仓造数、同步全局表、同步业务表、list 校验都是嵌套 TestCase；只有 1 个 Action 的步骤不包 TestCase。

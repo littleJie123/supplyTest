@@ -18,7 +18,7 @@ interface Opt {
 export default class extends TestCase {
   private opt: Opt;
   constructor(opt?: Opt) {
-    super();
+    super({ remark: '下单发送后分享，供应商仓接单建立关联' });
     this.opt = opt
   }
   getSupplierName() {
@@ -30,9 +30,9 @@ export default class extends TestCase {
   }
   protected buildActions(): BaseTest[] {
     return [
-      new ListMaterial(),
+      new ListMaterial().setRemark('刷新餐厅物料 map'),
 
-      new CreateNote3M(),
+      new CreateNote3M().setRemark('下单3物料并发送'),
 
 
       new AddWarehouse({
@@ -40,7 +40,7 @@ export default class extends TestCase {
         variableType: 'supplierWarehouse',
         type: 'supplier'
 
-      }),
+      }).setRemark('创建供应商仓'),
       new AddMaterial('羊肉', {
         type: 'supplierWarehouse',
         buyUnit: [
@@ -48,7 +48,7 @@ export default class extends TestCase {
           { "isSupplier": true, "name": "瓶", "fee": 500 }
         ],
         suppliers: []
-      }),
+      }).setRemark('供应商仓增加羊肉物料'),
       new QueryAction({
         name: '查询订单',
         url: '/app/note/listNote',
@@ -61,27 +61,29 @@ export default class extends TestCase {
             noteMap: ArrayUtil.toMapByKey(result.result.content, 'supplierName', 'noteId')
           }
         }
-      }),
+      }).setRemark('按供应商名记下 noteId，供分享'),
       new SaveShareData({
         data: {
           noteId: `\${noteMap.${this.getSupplierName()}}`
         }
-      }),
+      }).setRemark('保存分享数据，记下 shareDataNo'),
       new Action({
         url: '/share/shareNote',
         name: '查询分享单',
+        remark: '按 shareDataNo 拉分享单',
         param: {
           "shareDataNo": "${shareDataNo}",
           "usersId": "${usersId}",
         }
       }),
-      new ChangeWarehouse2Supplier(),
+      new ChangeWarehouse2Supplier().setRemark('切换到供应商仓'),
       new Action({
-        url: '/share/linkNote',
+        url: '/app/note/linkNote',
         name: '接单',
+        remark: '供应商接单 /app/note/linkNote，写入 Supplier_Link 历史',
         param: {
           warehouseId: "${supplierWarehouse.warehouseId}",
-          shareDataNo: "${shareDataNo}",
+          _shareDataNo: "${shareDataNo}",
         }
 
       }, {

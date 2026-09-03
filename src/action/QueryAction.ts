@@ -1,4 +1,4 @@
-import { HttpAction, IAfterProcess, IHttpActionParam } from "testflow";
+import { HttpAction, IAfterProcess, IHttpActionParam, JsonUtil } from "testflow";
 import IOpt from "../inf/IOpt";
 
 interface TestOpt{
@@ -39,7 +39,11 @@ export default class extends HttpAction{
     let opt = this.testOpt;
     let content = result.result.content
     if(opt?.checkers?.checkArray){
-      this.expectFindByArray(content,opt?.checkers?.checkArray)
+      let checkArray = opt?.checkers?.checkArray;
+      let datas = this.getVariable();
+      checkArray = JsonUtil.parseJson(checkArray, datas)
+    
+      this.expectFindByArray(content,checkArray)
     }
 
     if(opt?.checkers?.len){

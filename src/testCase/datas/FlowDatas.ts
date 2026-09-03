@@ -12,7 +12,7 @@ import Upload from "../../action/Upload";
 import path from "path";
 
 /**
- * 牛肉完整周期：6/30 按包盘点，再改规格 1包=100g，随后按克进货、按包销售、订单入库、退货、7/31 再盘点，
+ * 牛肉完整周期：6/30 按包盘点，再改规格 1包=100g，随后按克进货、按包销售、订单入库、退货、7/6报损、7/31 再盘点，
  * 最后 updatePrice 改 7/4 入库量价，改价前后各打一次 analysyMaterial，末尾再下 psi。
  * 详见同目录 FlowDatas.md。
  *
@@ -22,20 +22,21 @@ import path from "path";
  * - 7/3 销售 3包（红烧2+水煮1）：先扣盘点 0.5包/50，再扣进货 2.5包/500 → 余 2.5包 / 500
  * - 7/4 正常入库 2包(fee1)/600元（300元/包）→ 4.5包 / 1100
  * - 7/5 退货 1包：FIFO 扣 7/2 批次 200元 → 3.5包 / 900
- * - 7/31 盘点 1包：processSet 按最新批次 300元/包回填 → 1包 / 300
+ * - 7/6 报损 1.5包：FIFO 扣 7/2 剩余 1.5包/300 → 2包 / 600
+ * - 7/31 盘点 1包：processSet 按最新批次 300元/包回填 → 1包 / 300（盘亏 1包/300）
  * - updatePrice：7/4 改为 3包/1200（400元/包），重算 7/4 之后流水
- *   退货仍扣 7/2 的 1包/200 → 盘点前 4.5包/1500；7/31 按最新批次 400元/包回填 → 1包 / 400
+ *   退货仍扣 7/2 的 1包/200，报损再扣 7/2 剩余 1.5包/300 → 盘点前 3包/1200；7/31 按最新批次 400元/包回填 → 1包 / 400
  *
  * analysyMaterial（begin=7/01，end=7/31）只读 sales+inventory 的 costOfChange*-1：
- * 6/30 盘点流水在区间外，但销售 FIFO 仍扣该批次 0.5包/50。
- * 改价前：销售 0.5包/50+2.5包/500=550，7/31 盘亏 2.5包/600；allStock=5.5包/1150
- * BOM 100元/包：theoryCost=300；costByBomPrice=550；diffByCnt=250；diffByPrice=600；diff=850
- * 改价后：销售仍 550，7/31 盘亏 3.5包/1100；allStock=6.5包/1650
- * theoryCost=300；costByBomPrice=650；diffByCnt=350；diffByPrice=1000；diff=1350
+ * 6/30 盘点流水在区间外，但销售 FIFO 仍扣该批次 0.5包/50。报损不进该接口。
+ * 改价前：销售 0.5包/50+2.5包/500=550，7/31 盘亏 1包/300；allStock=4包/850
+ * BOM 100元/包：theoryCost=300；costByBomPrice=400；diffByCnt=100；diffByPrice=450；diff=550
+ * 改价后：销售仍 550，7/31 盘亏 2包/800；allStock=5包/1350
+ * theoryCost=300；costByBomPrice=500；diffByCnt=200；diffByPrice=850；diff=1050
  */
 export default class extends TestCase {
   constructor() {
-    super({ remark: '完整周期：6/30盘点→改规格→手工入库→销售→订单入库→退货→7/31盘点→改价改量→psi' })
+    super({ remark: '完整周期：6/30盘点→改规格→updateMaterial设stockUnitsId→手工入库→销售→订单入库→退货→7/6报损→7/31盘点→改价改量→psi' })
   }
 
   getName(): string {
@@ -83,6 +84,9 @@ export default class extends TestCase {
           supplierUnitsName: '包'
         }
       }),
+
+      new UpdateBeefStockUnits(),
+
       new ListMaterial().setRemark('刷新 materialMap'),
 
       new SetupProductBom(),
@@ -114,12 +118,14 @@ export default class extends TestCase {
 
       new BackJuly5(),
 
+      new OtherUseJuly6(),
+
       ...this.buildVerifyStock({
-        remark: '期末盘点前校验：3.5包/900元（FIFO 扣7/2批次1包/200）',
+        remark: '期末盘点前校验：2包/600元（7/6报损FIFO扣7/2剩余1.5包/300）',
         name: '校验7月31日盘点前库存',
-        cnt: 3.5,
+        cnt: 2,
         buyUnitFee: 1,
-        cost: 900
+        cost: 600
       }, variable),
 
       new Action({
@@ -142,12 +148,12 @@ export default class extends TestCase {
 
       this.buildAnalysyMaterial({
         name: '改价前analysyMaterial',
-        remark: '改价前：期初批次50 + 7/2消耗4包/800 + 7/4盘亏1包/300 = 1150；销量3包 theoryCost=300',
-        cost: 1150,
+        remark: '改价前：销售550 + 7/31盘亏1包/300 = 850；销量3包 theoryCost=300',
+        cost: 850,
         theoryCost: 300,
-        diff: 850,
-        diffByCnt: 250,
-        diffByPrice: 600,
+        diff: 550,
+        diffByCnt: 100,
+        diffByPrice: 450,
         saveAs: 'firstAnalysy'
       }, variable),
 
@@ -157,12 +163,12 @@ export default class extends TestCase {
 
       this.buildAnalysyMaterial({
         name: '改价后analysyMaterial',
-        remark: '改价后：销售仍550，7/31盘亏3.5包/1100，合计1650',
-        cost: 1650,
+        remark: '改价后：销售仍550，7/31盘亏2包/800，合计1350',
+        cost: 1350,
         theoryCost: 300,
-        diff: 1350,
-        diffByCnt: 350,
-        diffByPrice: 1000,
+        diff: 1050,
+        diffByCnt: 200,
+        diffByPrice: 850,
         compareWith: 'firstAnalysy'
       }, variable),
 
@@ -227,7 +233,7 @@ export default class extends TestCase {
   /**
    * 进销存 7/1~7/31（改价后）。数量按默认采购单位「包」。
    * 期初=6/30盘点 0.5包/50；采购=手工5包/1000+订单3包/1200−退货1包/200；
-   * 出库=销售3包/550+盘亏3.5包/1100；期末=1包/400。
+   * 出库=销售3包/550+报损1.5包/300+盘亏2包/800；期末=1包/400。
    */
   private buildPsiCheck(): BaseTest {
     let expect = {
@@ -300,6 +306,87 @@ export default class extends TestCase {
             }
           }]).setRemark(`${opt.remark}·校验金额`)
         ]
+      })
+    ]
+  }
+}
+
+/** updateMaterial：supplierUnitsName=包 优先于 isSupplier，校验 material.stockUnitsId 为包 */
+class UpdateBeefStockUnits extends TestCase {
+  constructor() {
+    super({ remark: 'updateMaterial：isSupplier 在克上，supplierUnitsName=包，stockUnitsId 应取包' })
+  }
+
+  getName(): string {
+    return 'updateMaterial设置stockUnitsId'
+  }
+
+  protected buildActions(): BaseTest[] {
+    return [
+      new Action({
+        name: 'updateMaterial:supplierUnitsName=包',
+        remark: '规格仍为克+包；isSupplier 标在克上，supplierUnitsName=包，stockUnitsId 应改为包',
+        url: '/app/material/updateMaterial',
+        method: 'POST',
+        param: {
+          materialId: '${materialMap.牛肉.materialId}',
+          name: '牛肉',
+          remark: '',
+          img: [],
+          buyUnit: [
+            { name: '克', fee: 1, isSupplier: true },
+            { name: '包', fee: 100, isSupplier: false }
+          ],
+          supplierUnitsName: '包',
+          category: { categoryId: '${categoryMap.肉类}' },
+          warehouseId: '${warehouse.warehouseId}',
+          warehouseGroupId: '${warehouse.warehouseGroupId}'
+        }
+      }),
+      new Action({
+        name: '校验牛肉stockUnitsId为包',
+        remark: 'free/query：material.stockUnitsId 应等于单位「包」的 unitsId，且不是「克」',
+        url: '/free/query',
+        param: {
+          array: [
+            {
+              table: 'material',
+              query: {
+                materialId: '${materialMap.牛肉.materialId}',
+                warehouseGroupId: '${warehouse.warehouseGroupId}',
+                isDel: 0
+              }
+            },
+            {
+              table: 'units',
+              query: {
+                name: ['克', '包'],
+                isDel: 0
+              }
+            }
+          ]
+        }
+      }, {
+        check(result) {
+          let materials = result.result?.material ?? []
+          let units = result.result?.units ?? []
+          let beef = materials[0]
+          CheckUtil.expectEqual(beef != null, true, '未查到牛肉物料')
+          let bag = units.find((row: any) => row.name === '包')
+          let gram = units.find((row: any) => row.name === '克')
+          CheckUtil.expectEqual(bag?.unitsId != null, true, '未查到单位「包」')
+          CheckUtil.expectEqual(gram?.unitsId != null, true, '未查到单位「克」')
+          CheckUtil.expectEqual(
+            String(beef.stockUnitsId) !== String(gram.unitsId),
+            true,
+            `stockUnitsId 不应是克（isSupplier 被 supplierUnitsName 覆盖），实际=${beef.stockUnitsId}`
+          )
+          CheckUtil.expectEqual(
+            String(beef.stockUnitsId),
+            String(bag.unitsId),
+            `牛肉 stockUnitsId 应为包(${bag.unitsId})，实际=${beef.stockUnitsId}`
+          )
+        }
       })
     ]
   }
@@ -488,6 +575,51 @@ class UpdatePriceJuly4 extends TestCase {
           instockCnt: 3
         }]
       }).setRemark('updatePrice：instockCnt=3, price=400, stockBuyUnitFee=1')
+    ]
+  }
+}
+
+/** listOtherType → saveOtherUse：7月6日报损牛肉 1.5包 */
+class OtherUseJuly6 extends TestCase {
+  constructor() {
+    super({ remark: '新增7月6日报损：牛肉 1.5包（FIFO 扣7/2剩余）' })
+  }
+
+  getName(): string {
+    return '7月6日报损1.5包'
+  }
+
+  protected buildActions(): BaseTest[] {
+    return [
+      new Action({
+        name: '查询消耗类型',
+        remark: '拉取 OtherType，拿到报损 id',
+        url: '/app/otherType/listOtherType',
+        param: {}
+      }, {
+        buildVariable(result) {
+          let content = result.result.content ?? []
+          return {
+            otherTypeMap: ArrayUtil.toMapByKey(content, 'name', 'otherTypeId')
+          }
+        }
+      }),
+      new Action({
+        name: '保存其他消耗',
+        remark: '报损：牛肉 1.5包，业务日 2026-07-06',
+        url: '/app/otherUse/saveOtherUse',
+        param: {
+          warehouseId: '${warehouse.warehouseId}',
+          openTypeId: '${otherTypeMap.报损}',
+          remark: '7月6日报损',
+          createTime: '2026-07-06',
+          otherItems: [{
+            materialId: '${materialMap.牛肉.materialId}',
+            cnt: 1.5,
+            buyUnitFee: 1
+          }]
+        }
+      })
     ]
   }
 }
