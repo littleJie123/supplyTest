@@ -250,7 +250,7 @@ export default class extends TestCase {
       name: '进销存excel校验',
       remark: '下载 psi excel（7/1~7/31，改价后），核对牛肉行与汇总金额',
       url: '/app/state/psi',
-      sheetName: '进销存',
+      sheetName: '总计',
       param: {
         begin: '2026-07-01',
         end: '2026-07-31',

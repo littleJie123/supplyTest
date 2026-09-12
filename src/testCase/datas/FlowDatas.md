@@ -17,7 +17,7 @@
 13. **改价前物料分析**：`/app/state/analysyMaterial`（begin=2026-07-01，end=2026-07-31），校验牛肉行。
 14. **改入库数量和价格**：`listNoteItem` 后调用 `/app/note/updatePrice`，把 7/4 牛肉从 **2包 / 300元** 改为 **3包 / 400元**（`instockCnt=3, price=400, stockBuyUnitFee=1`）。
 15. **改价后重算**：`Recal` 后再打 `analysyMaterial`，校验牛肉行，并对比改价前 `theoryCost` 不变、`cost` 变化。
-16. **进销存**：`/app/state/psi`（begin=2026-07-01，end=2026-07-31），下载 sheet「进销存」核对改价后牛肉行与汇总金额。
+16. **进销存**：`/app/state/psi`（begin=2026-07-01，end=2026-07-31），下载 sheet「总计」核对改价后牛肉行与汇总金额。
 
 # 注意点
 - 6 月没有 31 日，第一次盘点用 **2026-06-30**。必须在改规格之前，此时物料只有「包」。

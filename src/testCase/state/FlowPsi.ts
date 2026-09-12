@@ -1,4 +1,4 @@
-import { ArrayUtil, BaseTest, CheckUtil, DownloadExcelAction, TestCase } from "testflow";
+import { ArrayUtil, BaseTest, CheckUtil, MultiSheetDownloadAction, TestCase } from "testflow";
 import PreTestWithMeat from "../PreTestWithMeat";
 import Action from "../../action/Action";
 import Recal from "../../action/Recal";
@@ -14,10 +14,12 @@ import QueryAction from "../../action/QueryAction";
  *
  * 采购口径=入库类（订单+手工−退货）；出库=入库以外类型（数量金额×-1）；
  * 数量按物料默认采购单位换算成数字；单价=金额/数量（数量为0则单价为0）。
+ * 分类类型：肉类（羊/牛/猪）、蔬菜（白菜）；无类型物料「测试无分类」落在末 sheet。
+ * psi 多 sheet：总计 → 肉类 → 蔬菜 → 未设置类型分类的物料。
  */
 export default class extends TestCase {
   constructor() {
-    super({ remark: '进销存psi：期初盘点→订单/手工入库→报损/退货/盘亏→校验excel，7/1边界不进6月' })
+    super({ remark: '进销存psi：分类类型+无类型物料→流水→多sheet校验，7/1边界不进6月' })
   }
 
   getName(): string {
@@ -29,11 +31,14 @@ export default class extends TestCase {
     return [
       new PreTestWithMeat(),
 
+      new SetupCategoryTypes(),
+
       new AddCabbage(),
+      new AddNoTypeMaterial(),
 
       new Action({
         name: '5月30日盘点(除羊肉)',
-        remark: '牛肉2包/猪肉300g/白菜100g @1元/g；羊肉不盘，期初应为0',
+        remark: '牛肉2包/猪肉300g/白菜100g/测试无分类50g @1元/g；羊肉不盘，期初应为0',
         url: '/app/inventory/setInventoryByArray',
         param: {
           warehouseId: '${warehouse.warehouseId}',
@@ -41,7 +46,8 @@ export default class extends TestCase {
           array: [
             { materialId: '${materialMap.牛肉.materialId}', cnt: 2, buyUnitFee: 1, cost: 200 },
             { materialId: '${materialMap.猪肉.materialId}', cnt: 300, buyUnitFee: 1, cost: 300 },
-            { materialId: '${materialMap.白菜.materialId}', cnt: 100, buyUnitFee: 1, cost: 100 }
+            { materialId: '${materialMap.白菜.materialId}', cnt: 100, buyUnitFee: 1, cost: 100 },
+            { materialId: '${materialMap.测试无分类.materialId}', cnt: 50, buyUnitFee: 1, cost: 50 }
           ]
         }
       }),
@@ -50,7 +56,7 @@ export default class extends TestCase {
 
       new Action({
         name: '6月15日手工入库',
-        remark: '牛肉1包/羊肉100g/猪肉100g @3元/g，salesDay=2026-06-15',
+        remark: '牛肉1包/羊肉100g/猪肉100g @3元/g；测试无分类100g @2元/g，salesDay=2026-06-15',
         url: '/app/note/createHandInstock',
         param: {
           warehouseId: '${warehouse.warehouseId}',
@@ -70,6 +76,11 @@ export default class extends TestCase {
               materialId: '${materialMap.猪肉.materialId}',
               supplierId: '${supplierMap.供应商1}',
               cnt: 100, buyUnitFee: 1, cost: 300, price: 3, stockBuyUnitFee: 1
+            },
+            {
+              materialId: '${materialMap.测试无分类.materialId}',
+              supplierId: '${supplierMap.供应商1}',
+              cnt: 100, buyUnitFee: 1, cost: 200, price: 2, stockBuyUnitFee: 1
             }
           ]
         }
@@ -95,12 +106,13 @@ export default class extends TestCase {
 
       ...this.buildVerify({
         name: '校验6月30日盘点后库存',
-        remark: '牛4包(900)/羊200(500)/猪700(1400)/白菜100(100)',
+        remark: '牛4包(900)/羊200(500)/猪700(1400)/白菜100(100)/测试无分类150(250)',
         stocks: [
           { name: '牛肉', cnt: 4, buyUnitFee: 1, cost: 900 },
           { name: '羊肉', cnt: 200, buyUnitFee: 1, cost: 500 },
           { name: '猪肉', cnt: 700, buyUnitFee: 1, cost: 1400 },
-          { name: '白菜', cnt: 100, buyUnitFee: 1, cost: 100 }
+          { name: '白菜', cnt: 100, buyUnitFee: 1, cost: 100 },
+          { name: '测试无分类', cnt: 150, buyUnitFee: 1, cost: 250 }
         ]
       }, variable),
 
@@ -123,12 +135,13 @@ export default class extends TestCase {
 
       ...this.buildVerify({
         name: '校验7月1日入库后库存',
-        remark: '7/1已生效：牛5包(1300)；psi仍按6月末 牛4包(900)',
+        remark: '7/1已生效：牛5包(1300)；psi仍按6月末；测试无分类150(250)',
         stocks: [
           { name: '牛肉', cnt: 5, buyUnitFee: 1, cost: 1300 },
           { name: '羊肉', cnt: 200, buyUnitFee: 1, cost: 500 },
           { name: '猪肉', cnt: 700, buyUnitFee: 1, cost: 1400 },
-          { name: '白菜', cnt: 100, buyUnitFee: 1, cost: 100 }
+          { name: '白菜', cnt: 100, buyUnitFee: 1, cost: 100 },
+          { name: '测试无分类', cnt: 150, buyUnitFee: 1, cost: 250 }
         ]
       }, variable),
 
@@ -172,11 +185,11 @@ export default class extends TestCase {
   }
 
   /**
-   * 进销存 6/1~6/30。数量按默认采购单位：羊/牛=包，猪/白菜=克。
-   * 单价=金额/数量，除数为0时为0；800/3 截断为 266.66。
+   * 进销存 6/1~6/30。MultiSheet：总计 / 肉类 / 蔬菜 / 未设置类型分类的物料。
+   * 数量按默认采购单位：羊/牛=包，猪/白菜/测试无分类=克。
    */
   private buildPsiCheck(): BaseTest {
-    let expects = {
+    let allExpects = {
       羊肉: {
         '规格': '1包=100克',
         '期初数量': 0, '期初金额': 0, '期初价格': 0,
@@ -204,17 +217,44 @@ export default class extends TestCase {
         '采购数量': 0, '采购金额': 0, '采购单价': 0,
         '出库数量': 0, '出库金额': 0, '出库单价': 0,
         '期末数量': 100, '期末金额': 100, '期末单价': 1
+      },
+      测试无分类: {
+        '规格': '克',
+        '期初数量': 50, '期初金额': 50, '期初价格': 1,
+        '采购数量': 100, '采购金额': 200, '采购单价': 2,
+        '出库数量': 0, '出库金额': 0, '出库单价': 0,
+        '期末数量': 150, '期末金额': 250, '期末单价': 1.66
       }
     }
-    let sumExpects = {
-      '期初金额': 600, '采购金额': 2900, '出库金额': 600, '期末金额': 2900
+    let meatExpects = {
+      羊肉: allExpects.羊肉,
+      牛肉: allExpects.牛肉,
+      猪肉: allExpects.猪肉
     }
-    return new DownloadExcelAction({
-      name: '进销存excel校验',
-      remark: '下载 psi excel（6/1~6/30），核对4物料行与汇总金额；7/1入库不得计入',
+    let vegExpects = {
+      白菜: allExpects.白菜
+    }
+    let noTypeExpects = {
+      测试无分类: allExpects.测试无分类
+    }
+    let totalSum = {
+      '期初金额': 650, '采购金额': 3100, '出库金额': 600, '期末金额': 3150
+    }
+    let meatSum = {
+      '期初金额': 500, '采购金额': 2900, '出库金额': 600, '期末金额': 2800
+    }
+    let vegSum = {
+      '期初金额': 100, '采购金额': 0, '出库金额': 0, '期末金额': 100
+    }
+    let noTypeSum = {
+      '期初金额': 50, '采购金额': 200, '出库金额': 0, '期末金额': 250
+    }
+    const NO_TYPE_SHEET = '未设置类型分类的物料'
+    return new MultiSheetDownloadAction({
+      name: '进销存excel多sheet校验',
+      remark: '下载 psi 全部 sheet：总计→肉类→蔬菜→未设置类型；核对各 sheet；7/1入库不得计入',
       url: '/app/state/psi',
-      sheetName: '进销存',
-      highlight:true,
+      highlight: true,
       param: {
         begin: '2026-06-01',
         end: '2026-06-30',
@@ -222,25 +262,131 @@ export default class extends TestCase {
         warehouseGroupId: '${warehouse.warehouseGroupId}'
       }
     }, {
-      check(rows: any[]) {
-        CheckUtil.expectEqual(rows.length, 5, `进销存行数应为4物料+1汇总，实际${rows.length}`)
-        for (let name in expects) {
-          let row = rows.find(r => r['物料名称'] == name)
-          CheckUtil.expectEqual(row != null, true, `进销存缺少${name}行`)
-          let expect = expects[name]
-          for (let col in expect) {
-            CheckUtil.expectEqual(row[col], expect[col],
-              `进销存:${name}.${col}，期望${expect[col]}，实际${row?.[col]}`)
-          }
-        }
-        let sumRow = rows.find(r => r['物料名称'] == '汇总')
-        CheckUtil.expectEqual(sumRow != null, true, '进销存缺少汇总行')
-        for (let col in sumExpects) {
-          CheckUtil.expectEqual(sumRow[col], sumExpects[col],
-            `进销存:汇总.${col}，期望${sumExpects[col]}，实际${sumRow?.[col]}`)
-        }
+      check(sheets: any) {
+        let sheetNames = Object.keys(sheets ?? {})
+        CheckUtil.expectEqual(sheetNames.length, 4,
+          `应有4个sheet（总计/肉类/蔬菜/未设置类型），实际=${JSON.stringify(sheetNames)}`)
+        CheckUtil.expectEqual(sheetNames[0], '总计',
+          `第一个sheet应为总计，实际=${JSON.stringify(sheetNames)}`)
+        CheckUtil.expectEqual(sheetNames[1], '肉类',
+          `第二个sheet应为肉类（categoryTypeId 更小），实际=${JSON.stringify(sheetNames)}`)
+        CheckUtil.expectEqual(sheetNames[2], '蔬菜',
+          `第三个sheet应为蔬菜，实际=${JSON.stringify(sheetNames)}`)
+        CheckUtil.expectEqual(sheetNames[3], NO_TYPE_SHEET,
+          `最后一个sheet应为「${NO_TYPE_SHEET}」，实际=${JSON.stringify(sheetNames)}`)
+        checkPsiSheet(sheets['总计'], allExpects, totalSum, '总计')
+        checkPsiSheet(sheets['肉类'], meatExpects, meatSum, '肉类')
+        checkPsiSheet(sheets['蔬菜'], vegExpects, vegSum, '蔬菜')
+        checkPsiSheet(sheets[NO_TYPE_SHEET], noTypeExpects, noTypeSum, NO_TYPE_SHEET)
       }
     })
+  }
+}
+
+function checkPsiSheet(
+  rows: any[],
+  expects: { [name: string]: any },
+  sumExpects: { [col: string]: number },
+  sheetName: string
+) {
+  CheckUtil.expectEqual(rows != null, true, `缺少sheet「${sheetName}」`)
+  let materialCnt = Object.keys(expects).length
+  CheckUtil.expectEqual(rows.length, materialCnt + 1,
+    `${sheetName}行数应为${materialCnt}物料+1汇总，实际${rows.length}`)
+  for (let name in expects) {
+    let row = rows.find(r => r['物料名称'] == name)
+    CheckUtil.expectEqual(row != null, true, `${sheetName}缺少${name}行`)
+    let expect = expects[name]
+    for (let col in expect) {
+      CheckUtil.expectEqual(row[col], expect[col],
+        `${sheetName}:${name}.${col}，期望${expect[col]}，实际${row?.[col]}`)
+    }
+  }
+  let sumRow = rows.find(r => r['物料名称'] == '汇总')
+  CheckUtil.expectEqual(sumRow != null, true, `${sheetName}缺少汇总行`)
+  for (let col in sumExpects) {
+    CheckUtil.expectEqual(sumRow[col], sumExpects[col],
+      `${sheetName}:汇总.${col}，期望${sumExpects[col]}，实际${sumRow?.[col]}`)
+  }
+}
+
+/**
+ * 新增分类类型「肉类」「蔬菜」，并挂到同名 category 上。
+ * 先 add 再 list，避免 list 为空时 init 出默认「食材/易耗品」。
+ */
+class SetupCategoryTypes extends TestCase {
+  constructor() {
+    super({ remark: '新增分类类型肉类/蔬菜，并绑定到分类' })
+  }
+
+  getName(): string {
+    return '设置分类类型'
+  }
+
+  protected buildActions(): BaseTest[] {
+    return [
+      new Action({
+        name: '新增分类类型：肉类',
+        remark: 'addCategoryType 肉类',
+        url: '/app/categoryType/addCategoryType',
+        param: {
+          name: '肉类',
+          warehouseGroupId: '${warehouse.warehouseGroupId}'
+        }
+      }),
+      new Action({
+        name: '新增分类类型：蔬菜',
+        remark: 'addCategoryType 蔬菜（id 大于肉类，sheet 排在肉类后）',
+        url: '/app/categoryType/addCategoryType',
+        param: {
+          name: '蔬菜',
+          warehouseGroupId: '${warehouse.warehouseGroupId}'
+        }
+      }),
+      new Action({
+        name: '查询分类类型',
+        remark: 'listCategoryType → categoryTypeMap',
+        url: '/app/categoryType/listCategoryType',
+        param: {
+          warehouseGroupId: '${warehouse.warehouseGroupId}'
+        }
+      }, {
+        buildVariable(result) {
+          let content = result.result.content
+          return {
+            categoryTypeMap: ArrayUtil.toMapByKey(content, 'name', 'categoryTypeId')
+          }
+        },
+        check(result) {
+          let content: any[] = result.result?.content ?? []
+          let names = content.map(row => row.name)
+          CheckUtil.expectEqual(names.includes('肉类'), true, '应有分类类型肉类')
+          CheckUtil.expectEqual(names.includes('蔬菜'), true, '应有分类类型蔬菜')
+        }
+      }),
+      new Action({
+        name: '分类肉类绑定类型肉类',
+        remark: 'updateCategory：肉类 → categoryType 肉类',
+        url: '/app/category/updateCategory',
+        param: {
+          categoryId: '${categoryMap.肉类}',
+          warehouseGroupId: '${warehouse.warehouseGroupId}',
+          name: '肉类',
+          categoryType: { categoryTypeId: '${categoryTypeMap.肉类}' }
+        }
+      }),
+      new Action({
+        name: '分类蔬菜绑定类型蔬菜',
+        remark: 'updateCategory：蔬菜 → categoryType 蔬菜',
+        url: '/app/category/updateCategory',
+        param: {
+          categoryId: '${categoryMap.蔬菜}',
+          warehouseGroupId: '${warehouse.warehouseGroupId}',
+          name: '蔬菜',
+          categoryType: { categoryTypeId: '${categoryTypeMap.蔬菜}' }
+        }
+      })
+    ]
   }
 }
 
@@ -262,6 +408,30 @@ class AddCabbage extends TestCase {
         code: 'MAT004'
       }).setRemark('增加白菜，单位克'),
       new ListMaterial().setRemark('刷新 materialMap，拿到白菜')
+    ]
+  }
+}
+
+/**
+ * 挂在「蛋类」分类下（未绑定 categoryType），用于验证末 sheet「未设置类型分类的物料」。
+ */
+class AddNoTypeMaterial extends TestCase {
+  constructor() {
+    super({ remark: '增加测试无分类（蛋类无类型，落入末 sheet）' })
+  }
+
+  getName(): string {
+    return '增加测试无分类'
+  }
+
+  protected buildActions(): BaseTest[] {
+    return [
+      new AddMaterial('测试无分类', {
+        buyUnit: [{ name: '克', fee: 1, isSupplier: true }],
+        categoryId: '${categoryMap.蛋类}',
+        code: 'MAT005'
+      }).setRemark('增加测试无分类，单位克，分类蛋类（无 categoryType）'),
+      new ListMaterial().setRemark('刷新 materialMap，拿到测试无分类')
     ]
   }
 }

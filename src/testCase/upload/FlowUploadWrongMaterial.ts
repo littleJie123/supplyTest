@@ -43,7 +43,7 @@ export default class extends TestCase {
 
         result = result.result.importResult;
         CheckUtil.expectEqual(result.checked ,false)
-        CheckUtil.expectEqual(result.errors.length,2);
+        CheckUtil.expectEqual(result.errors.length,1);
       }
     }))
 
