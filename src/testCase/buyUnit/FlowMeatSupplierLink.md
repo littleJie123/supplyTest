@@ -4,7 +4,7 @@
 # 测试步骤
 1. **前置**：`PreTestWithMeatAndSupplier`（肉类规格、供应商仓、首单 create → send → 分享接单）。
 2. **首单创建/发送/接单后**：双端比对 `purcharse`；校验羊包/牛克单位与 `linkNoteItemId`（期望：羊1、牛100）。
-3. **供应商发货**：供应商仓 `processNote(send)`，发货量=采购量；双端比对 `sendCnt`。
+3. **供应商发货**：供应商仓 `processNote(send)`，发货量=采购量；比对供应商 `sendCnt` 与餐厅 `linkSendCnt`（视图字段换算，不落库同步）。
 4. **供应商出库**：供应商仓 `processNote(instock)`，出库量=发货量；供应商验 `instock≈purcharse`，餐厅验 `linkInstockCnt`（与供应商 instock 换算一致）。**注意**：供应商出库后餐厅看的是 `linkInstockCnt`，不是本方 `instock`。
 5. **第二单创建**：餐厅再 `createNote`（羊1包 + 牛50克）——已链接则自动出链接单；双端比对 `purcharse` + 单位。
 6. **第二单发送**：`sendNote`；再双端比对 `purcharse`（发送不改变采购量）。

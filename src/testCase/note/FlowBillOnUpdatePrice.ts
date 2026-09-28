@@ -151,6 +151,7 @@ export default class extends TestCase {
         changes: [{
           name: '猪肉',
           price: 25,
+          buyUnitFee: 1,
           stockBuyUnitFee: 1,
           instockCnt: 15
         }],
@@ -177,6 +178,7 @@ export default class extends TestCase {
         changes: [{
           name: '猪肉',
           price: 15,
+          buyUnitFee: 1,
           stockBuyUnitFee: 1,
           instockCnt: 8
         }],

@@ -1,4 +1,4 @@
-import { ArrayUtil, BaseTest, CheckUtil, DownloadExcelAction, TestCase } from "testflow";
+import { ArrayUtil, BaseTest, CheckUtil, DownloadExcelAction, MultiSheetDownloadAction, TestCase } from "testflow";
 import PreTest from "../PreTest";
 import Action from "../../action/Action";
 import Recal from "../../action/Recal";
@@ -11,9 +11,24 @@ import UpdateCntAndPrice from "../../action/note/UpdateCntAndPrice";
 import Upload from "../../action/Upload";
 import path from "path";
 
+function expectCols(row: any, expect: Record<string, any>, label: string) {
+  CheckUtil.expectEqual(row != null, true, `${label}缺少行`)
+  for (let col in expect) {
+    CheckUtil.expectEqual(row[col], expect[col], `${label}.${col}，期望${expect[col]}，实际${row?.[col]}`)
+  }
+}
+
+function readVar(variable: any, path: string): any {
+  let cur = variable
+  for (let key of path.split('.')) {
+    cur = cur?.[key]
+  }
+  return cur
+}
+
 /**
  * 牛肉完整周期：6/30 按包盘点，再改规格 1包=100g，随后按克进货、按包销售、订单入库、退货、7/6报损、7/31 再盘点，
- * 最后 updatePrice 改 7/4 入库量价，改价前后各打一次 analysyMaterial，末尾再下 psi。
+ * 最后 updatePrice 改 7/4 入库量价，改价前后各打一次 analysyMaterial，再下载报表（不含结算单）。
  * 详见同目录 FlowDatas.md。
  *
  * FIFO（标准单位=包；克用 buyUnitFee=100）：
@@ -36,7 +51,7 @@ import path from "path";
  */
 export default class extends TestCase {
   constructor() {
-    super({ remark: '完整周期：6/30盘点→改规格→updateMaterial设stockUnitsId→手工入库→销售→订单入库→退货→7/6报损→7/31盘点→改价改量→psi' })
+    super({ remark: '完整周期：6/30盘点→改规格→手工入库→销售→订单入库→退货→报损→7/31盘点→改价→报表下载（不含结算单）' })
   }
 
   getName(): string {
@@ -172,7 +187,8 @@ export default class extends TestCase {
         compareWith: 'firstAnalysy'
       }, variable),
 
-      this.buildPsiCheck()
+      this.buildPsiCheck(),
+      ...this.buildDownloadSteps(variable)
     ]
   }
 
@@ -263,8 +279,16 @@ export default class extends TestCase {
         let row = rows.find(r => r['物料名称'] == '牛肉')
         CheckUtil.expectEqual(row != null, true, '进销存缺少牛肉行')
         for (let col in expect) {
-          CheckUtil.expectEqual(row[col], expect[col],
-            `进销存:牛肉.${col}，期望${expect[col]}，实际${row?.[col]}`)
+          let expVal = expect[col]
+          let actVal = row[col]
+          if (typeof expVal === 'number') {
+            // excel导出数值保留2位小数，四舍五入允许0.01误差
+            CheckUtil.expectEqual(Math.abs(actVal - expVal) <= 0.01 + 1e-9, true,
+              `进销存:牛肉.${col}，期望${expVal}，实际${actVal}`)
+          } else {
+            CheckUtil.expectEqual(actVal, expVal,
+              `进销存:牛肉.${col}，期望${expVal}，实际${actVal}`)
+          }
         }
         let sumRow = rows.find(r => r['物料名称'] == '汇总')
         CheckUtil.expectEqual(sumRow != null, true, '进销存缺少汇总行')
@@ -272,6 +296,419 @@ export default class extends TestCase {
           CheckUtil.expectEqual(sumRow[col], sumExpects[col],
             `进销存:汇总.${col}，期望${sumExpects[col]}，实际${sumRow?.[col]}`)
         }
+      }
+    })
+  }
+
+  /**
+   * 报表中心下载（不含结算单 /app/bill/*）。
+   * 先记下 title，再结算三张订单，然后下载。订单号列为 title。
+   */
+  private buildDownloadSteps(variable: any): BaseTest[] {
+    return [
+      new QueryAction({
+        name: '记下手工单订单号',
+        url: '/app/note/listNote',
+        query: {
+          status: 'instocked',
+          origin: 'hand'
+        }
+      }, {
+        check(result) {
+          let content: any[] = result.result.content ?? []
+          content = content.filter(row => row.origin == 'hand')
+          CheckUtil.expectEqual(content.length, 1, `手工单应有1张，实际${content.length}`)
+          CheckUtil.expectEqual(String(content[0].title), String(content[0].noteId),
+            `手工单title应等于订单号，title=${content[0].title}，noteId=${content[0].noteId}`)
+          CheckUtil.expectEqual(String(variable.note?.title), String(variable.note?.noteId),
+            `7/4订单title应等于订单号，title=${variable.note?.title}，noteId=${variable.note?.noteId}`)
+        },
+        buildVariable(result) {
+          let row = (result.result.content ?? []).find((item: any) => item.origin == 'hand')
+          return {
+            handNoteId: row.noteId,
+            handTitle: String(row.title)
+          }
+        }
+      }).setRemark('手工单、7/4订单的 title 都等于自身 noteId'),
+
+      new StatementJulyNotes(),
+
+      this.buildStateByMaterialCheck(),
+      this.buildStateByProductCheck(),
+      this.buildStateNoteCheck(variable),
+      this.buildDownloadBySupplierCheck(variable),
+      this.buildDownloadNotesCheck(variable, 'hand'),
+      this.buildDownloadNotesCheck(variable, 'order'),
+      this.buildDownloadNotesCheck(variable, 'back')
+    ]
+  }
+
+  /**
+   * 物料统计 7/1~7/31（改价后）。数量按「几包几克」。
+   * 理论=销售3包/550；实际=销售+盘亏5包/1350；入库=手工5+订单3−退货1=7包/2000；
+   * 出库=销售3/550+报损1.5/300+盘亏2/800=6.5包/1650；期初0.5包/50；期末1包/400。
+   */
+  private buildStateByMaterialCheck(): BaseTest {
+    let expect = {
+      '物料编码': 'MAT_BEEF',
+      '规格': '1包=100克',
+      '单位': '克',
+      '使用频次': 2,
+      '理论成本[数量]': '3包',
+      '实际成本[数量]': '5包',
+      '差异数量': '2包',
+      '数量差异率': '66.67%',
+      '理论成本[金额]': 550,
+      '实际成本[金额]': 1350,
+      '差异金额': 800,
+      '金额差异率': '145.45%',
+      '期初数量': '50克',
+      '入库数量': '7包',
+      '出库数量': '6包50克',
+      '期末数量': '1包',
+      '期初金额': 50,
+      '入库金额': 2000,
+      '出库金额': 1650,
+      '期末金额': 400
+    }
+    let sumExpects = {
+      '理论成本[金额]': 550,
+      '实际成本[金额]': 1350,
+      '差异金额': 800,
+      '期初金额': 50,
+      '入库金额': 2000,
+      '出库金额': 1650,
+      '期末金额': 400
+    }
+    return new DownloadExcelAction({
+      name: '物料统计excel校验',
+      remark: '下载 stateByMaterial（7/1~7/31，改价后），核对牛肉行与汇总金额',
+      url: '/app/state/stateByMaterial',
+      sheetName: '物料统计',
+      param: {
+        begin: '2026-07-01',
+        end: '2026-07-31',
+        warehouseId: '${warehouse.warehouseId}',
+        warehouseGroupId: '${warehouse.warehouseGroupId}'
+      }
+    }, {
+      check(rows: any[]) {
+        CheckUtil.expectEqual(rows.length, 2, `物料统计行数应为1物料+1汇总，实际${rows.length}`)
+        let row = rows.find(r => r['物料名称'] == '牛肉')
+        CheckUtil.expectEqual(row != null, true, '物料统计缺少牛肉行')
+        for (let col in expect) {
+          CheckUtil.expectEqual(row[col], expect[col], `物料统计:牛肉.${col}，期望${expect[col]}，实际${row[col]}`)
+        }
+        let sumRow = rows.find(r => r['物料名称'] == '汇总')
+        CheckUtil.expectEqual(sumRow != null, true, '物料统计缺少汇总行')
+        for (let col in sumExpects) {
+          CheckUtil.expectEqual(sumRow[col], sumExpects[col], `物料统计:汇总.${col}，期望${sumExpects[col]}，实际${sumRow?.[col]}`)
+        }
+      }
+    })
+  }
+
+  /**
+   * 餐品统计：红烧先扣 0.5包/50+1.5包/300=350，水煮再扣 1包/200。
+   * 实际=销售+盘亏 5包/1350，按消耗占比分摊差异。
+   */
+  private buildStateByProductCheck(): BaseTest {
+    let expects = {
+      '红烧牛肉': {
+        '物料编码': 'MAT_BEEF',
+        '物料名称': '牛肉',
+        '规格': '1包=100克',
+        '单位': '克',
+        '菜品销量': 2,
+        'bom数量': '1包',
+        '消耗数量总和': '2包',
+        '用料占比': '66.67%',
+        '差异数量': '1包33.33克',
+        '消耗金额总和': 350,
+        '金额占比': '63.64%',
+        '差异金额': 509.09
+      },
+      '水煮牛肉': {
+        '物料编码': 'MAT_BEEF',
+        '物料名称': '牛肉',
+        '规格': '1包=100克',
+        '单位': '克',
+        '菜品销量': 1,
+        'bom数量': '1包',
+        '消耗数量总和': '1包',
+        '用料占比': '33.33%',
+        '差异数量': '66.67克',
+        '消耗金额总和': 200,
+        '金额占比': '36.36%',
+        '差异金额': 290.91
+      }
+    }
+    return new DownloadExcelAction({
+      name: '餐品统计excel校验',
+      remark: '下载 stateByProduct（7/1~7/31），核对红烧/水煮消耗、占比和差异',
+      url: '/app/state/stateByProduct',
+      sheetName: '餐品统计',
+      param: {
+        begin: '2026-07-01',
+        end: '2026-07-31',
+        warehouseId: '${warehouse.warehouseId}',
+        warehouseGroupId: '${warehouse.warehouseGroupId}'
+      }
+    }, {
+      check(rows: any[]) {
+        CheckUtil.expectEqual(rows.length, 2, `餐品统计行数应为2，实际${rows.length}`)
+        for (let name in expects) {
+          let row = rows.find(r => r['菜品名称'] == name)
+          CheckUtil.expectEqual(row != null, true, `餐品统计缺少${name}`)
+          let expect = expects[name]
+          for (let col in expect) {
+            CheckUtil.expectEqual(row[col], expect[col], `餐品统计:${name}.${col}，期望${expect[col]}，实际${row[col]}`)
+          }
+        }
+      }
+    })
+  }
+
+  /**
+   * 三张单都已结算。应付 = 手工1000 + 订单1200 − 退货300 = 1900。
+   * 供应商 sheet 的订单号是 title。
+   */
+  private buildStateNoteCheck(variable: any): BaseTest {
+    return new MultiSheetDownloadAction({
+      name: '应付款excel校验',
+      remark: '结算后应付款：供应商1应付1900，三张订单号为 title',
+      url: '/app/state/stateNote',
+      param: {
+        begin: '2026-07-01',
+        end: '2026-07-31',
+        warehouseId: '${warehouse.warehouseId}',
+        warehouseGroupId: '${warehouse.warehouseGroupId}'
+      }
+    }, {
+      check(sheets: any) {
+        let names = Object.keys(sheets ?? {})
+        CheckUtil.expectEqual(names.join(','), '应付款汇总,供应商1', `应付款sheet应为汇总和供应商1，实际=${names.join(',')}`)
+        let sumRows = sheets['应付款汇总'] ?? []
+        CheckUtil.expectEqual(sumRows.length, 2, `应付款汇总应有供应商+汇总，实际${sumRows.length}，${JSON.stringify(sumRows)}`)
+        let supplier = sumRows.find((r: any) => r['供应商名称'] == '供应商1')
+        let total = sumRows.find((r: any) => r['供应商名称'] == '汇总')
+        expectCols(supplier, { '应付账款': 1900 }, '应付款汇总:供应商1')
+        expectCols(total, { '应付账款': 1900 }, '应付款汇总')
+
+        let handTitle = String(variable.handTitle)
+        let orderTitle = String(variable.note.title)
+        let backTitle = String(variable.backTitle)
+        let noteRows = sheets['供应商1'] ?? []
+        CheckUtil.expectEqual(noteRows.length, 4, `供应商1应有3单+汇总，实际${noteRows.length}，${JSON.stringify(noteRows)}`)
+        let hand = noteRows.find((r: any) => r['订单号'] == handTitle)
+        let order = noteRows.find((r: any) => r['订单号'] == orderTitle)
+        let back = noteRows.find((r: any) => r['订单号'] == backTitle)
+        expectCols(hand, {
+          '日期': '2026-07-02',
+          '物料数量': 1,
+          '入库金额': 1000,
+          '结算金额': 1000,
+          '评分': '没有评分'
+        }, '应付款手工单')
+        expectCols(order, {
+          '日期': '2026-07-04',
+          '物料数量': 1,
+          '入库金额': 1200,
+          '结算金额': 1200,
+          '评分': '没有评分'
+        }, '应付款7/4订单')
+        expectCols(back, {
+          '日期': '2026-07-05',
+          '物料数量': 1,
+          '入库金额': -300,
+          '结算金额': -300,
+          '评分': '没有评分'
+        }, '应付款退货单')
+      }
+    })
+  }
+
+  /**
+   * 按供应商导订单。三张都已结算，title=各自 noteId。
+   * 手工 5包/1000；7/4 订货仍2包、入库3包/1200、订货金额800；退货1包按下单价300取负。
+   * 结算金额等于入库金额：1000 + 1200 − 300 = 1900。
+   */
+  private buildDownloadBySupplierCheck(variable: any): BaseTest {
+    return new MultiSheetDownloadAction({
+      name: '按供应商导订单excel校验',
+      remark: '核对供应商汇总、三张订单的 title 与金额，退货数量和金额为负',
+      url: '/app/note/downloadBySupplier',
+      param: {
+        begin: '2026-07-01',
+        end: '2026-07-31',
+        warehouseId: '${warehouse.warehouseId}',
+        warehouseGroupId: '${warehouse.warehouseGroupId}'
+      }
+    }, {
+      check(sheets: any) {
+        let handTitle = String(variable.handTitle)
+        let orderTitle = String(variable.note.title)
+        let backTitle = String(variable.backTitle)
+        CheckUtil.expectEqual(handTitle, String(variable.handNoteId), '手工单title应等于noteId')
+        CheckUtil.expectEqual(orderTitle, String(variable.note.noteId), '7/4订单title应等于noteId')
+        CheckUtil.expectEqual(backTitle, String(variable.backNoteId), '退货单title应等于noteId')
+
+        let sumRows = sheets['供应商列表']
+        CheckUtil.expectEqual(sumRows != null, true, `缺少 sheet「供应商列表」，实际=${Object.keys(sheets ?? {}).join(',')}`)
+        CheckUtil.expectEqual(sumRows.length, 2, `供应商列表应有供应商+汇总共2行，实际${sumRows.length}`)
+        let supplier = sumRows.find((r: any) => r['供应商名称'] == '供应商1')
+        CheckUtil.expectEqual(supplier != null, true, '供应商列表缺少供应商1')
+        expectCols(supplier, {
+          '订单数量': 3,
+          '未入库订单数量': 0,
+          '未对账数量': 0,
+          '已对账数量': 3,
+          '订货金额': 1500,
+          '入库金额': 1900,
+          '结算金额': 1900
+        }, '供应商列表:供应商1')
+        let sum = sumRows.find((r: any) => r['供应商名称'] == '汇总')
+        expectCols(sum, {
+          '订单数量': 3,
+          '未入库订单数量': 0,
+          '未对账数量': 0,
+          '已对账数量': 3,
+          '订货金额': 1500,
+          '入库金额': 1900,
+          '结算金额': 1900
+        }, '供应商列表:汇总')
+
+        let noteRows = sheets['供应商1']
+        CheckUtil.expectEqual(noteRows != null, true, '缺少 sheet「供应商1」')
+        CheckUtil.expectEqual(noteRows.length, 4, `供应商1应有3单+汇总，实际${noteRows.length}，${JSON.stringify(noteRows)}`)
+        let hand = noteRows.find((r: any) => r['订单号'] == handTitle)
+        let order = noteRows.find((r: any) => r['订单号'] == orderTitle)
+        let back = noteRows.find((r: any) => r['订单号'] == backTitle)
+        CheckUtil.expectEqual(hand != null, true, `供应商1缺少手工单订单号${handTitle}`)
+        CheckUtil.expectEqual(order != null, true, `供应商1缺少7/4订单号${orderTitle}`)
+        CheckUtil.expectEqual(back != null, true, `供应商1缺少退货单订单号${backTitle}`)
+        expectCols(hand, {
+          '订单类型': '订货单',
+          '状态名称': '已对账',
+          '物料数量': 1,
+          '订货金额': 1000,
+          '入库金额': 1000,
+          '结算金额': 1000,
+          '发单日期': '2026-07-02'
+        }, '手工单')
+        expectCols(order, {
+          '订单类型': '订货单',
+          '状态名称': '已对账',
+          '物料数量': 1,
+          '订货金额': 800,
+          '入库金额': 1200,
+          '结算金额': 1200,
+          '发单日期': '2026-07-04'
+        }, '7/4订单')
+        expectCols(back, {
+          '订单类型': '退货单',
+          '状态名称': '已对账',
+          '物料数量': 1,
+          '订货金额': -300,
+          '入库金额': -300,
+          '结算金额': -300,
+          '发单日期': '2026-07-05'
+        }, '退货单')
+
+        let materialRows = (sheets['供应商1的物料'] ?? []).filter((r: any) => r && r['物料名'] == '牛肉')
+        CheckUtil.expectEqual(materialRows.length, 3, `物料行应有3条牛肉，实际${JSON.stringify(sheets['供应商1的物料'])}`)
+        let handItem = materialRows.find((r: any) => r['订单号'] == handTitle)
+        let orderItem = materialRows.find((r: any) => r['订单号'] == orderTitle)
+        let backItem = materialRows.find((r: any) => r['订单号'] == backTitle)
+        expectCols(handItem, {
+          '单位': '包',
+          '订货数量': 5,
+          '入库数量': 5,
+          '结算数量': 5,
+          '价格': 200,
+          '订货金额': 1000,
+          '入库金额': 1000,
+          '结算金额': 1000
+        }, '手工单物料')
+        expectCols(orderItem, {
+          '单位': '包',
+          '订货数量': 2,
+          '入库数量': 3,
+          '结算数量': 3,
+          '价格': 400,
+          '订货金额': 800,
+          '入库金额': 1200,
+          '结算金额': 1200
+        }, '7/4订单物料')
+        expectCols(backItem, {
+          '单位': '包',
+          '订货数量': -1,
+          '入库数量': -1,
+          '结算数量': -1,
+          '价格': 300,
+          '订货金额': -300,
+          '入库金额': -300,
+          '结算金额': -300
+        }, '退货单物料')
+      }
+    })
+  }
+
+  /** 单张订单下载：订单一览的订单号是 title，且存在以 title 命名的 sheet */
+  private buildDownloadNotesCheck(variable: any, which: 'hand' | 'order' | 'back'): BaseTest {
+    let opt = {
+      hand: {
+        name: '下载手工单',
+        noteId: '${handNoteId}',
+        titleKey: 'handTitle',
+        idKey: 'handNoteId',
+        cost: 1000,
+        instockCost: 1000
+      },
+      order: {
+        name: '下载7/4订单',
+        noteId: '${note.noteId}',
+        titleKey: 'note.title',
+        idKey: 'note.noteId',
+        cost: 800,
+        instockCost: 1200
+      },
+      back: {
+        name: '下载退货单',
+        noteId: '${backNoteId}',
+        titleKey: 'backTitle',
+        idKey: 'backNoteId',
+        cost: 300,
+        instockCost: 300
+      }
+    }[which]
+    return new MultiSheetDownloadAction({
+      name: opt.name,
+      remark: `${opt.name}：订单一览订单号=title，sheet 名也是 title`,
+      url: '/app/note/downloadNotes',
+      param: {
+        noteId: opt.noteId,
+        warehouseId: '${warehouse.warehouseId}',
+        warehouseGroupId: '${warehouse.warehouseGroupId}'
+      }
+    }, {
+      check(sheets: any) {
+        let title = String(readVar(variable, opt.titleKey))
+        let noteId = String(readVar(variable, opt.idKey))
+        CheckUtil.expectEqual(title, noteId, `${opt.name} title应等于noteId，title=${title}，noteId=${noteId}`)
+        CheckUtil.expectEqual(sheets[title] != null, true, `${opt.name}缺少以订单号命名的sheet，实际=${Object.keys(sheets ?? {}).join(',')}`)
+        let rows = sheets['订单一览']
+        CheckUtil.expectEqual(rows != null, true, `${opt.name}缺少订单一览`)
+        let row = (rows ?? []).find((r: any) => r['订单号'] == title)
+        CheckUtil.expectEqual(row != null, true, `${opt.name}订单一览缺少订单号${title}，实际=${JSON.stringify(rows)}`)
+        expectCols(row, {
+          '供货商': '供应商1',
+          '物料数': 1,
+          '订货金额': opt.cost,
+          '入库金额': opt.instockCost,
+          '评分': '没有评分'
+        }, opt.name)
       }
     })
   }
@@ -311,6 +748,39 @@ export default class extends TestCase {
   }
 }
 
+/** 结算手工单、7/4订单、退货单。结算金额用入库金额。 */
+class StatementJulyNotes extends TestCase {
+  constructor() {
+    super({ remark: 'statmentNote：手工1000、7/4订单1200、退货300' })
+  }
+
+  getName(): string {
+    return '结算三张订单'
+  }
+
+  protected buildActions(): BaseTest[] {
+    return [
+      this.buildOne('结算手工单', '${handNoteId}', 1000),
+      this.buildOne('结算7/4订单', '${note.noteId}', 1200),
+      this.buildOne('结算退货单', '${backNoteId}', 300)
+    ]
+  }
+
+  private buildOne(name: string, noteId: string, statementCost: number): BaseTest {
+    return new Action({
+      name,
+      remark: `statmentNote：结算金额 ${statementCost}`,
+      url: '/app/note/statmentNote',
+      param: {
+        noteId,
+        statementCost,
+        warehouseId: '${warehouse.warehouseId}',
+        warehouseGroupId: '${warehouse.warehouseGroupId}'
+      }
+    })
+  }
+}
+
 /** updateMaterial：supplierUnitsName=包 优先于 isSupplier，校验 material.stockUnitsId 为包 */
 class UpdateBeefStockUnits extends TestCase {
   constructor() {
@@ -331,6 +801,7 @@ class UpdateBeefStockUnits extends TestCase {
         param: {
           materialId: '${materialMap.牛肉.materialId}',
           name: '牛肉',
+          code: 'MAT_BEEF',
           remark: '',
           img: [],
           buyUnit: [
@@ -571,10 +1042,11 @@ class UpdatePriceJuly4 extends TestCase {
         changes: [{
           name: '牛肉',
           price: 400,
+          buyUnitFee: 1,
           stockBuyUnitFee: 1,
           instockCnt: 3
         }]
-      }).setRemark('updatePrice：instockCnt=3, price=400, stockBuyUnitFee=1')
+      }).setRemark('updatePrice：instockCnt=3, price=400, buyUnitFee=1, stockBuyUnitFee=1')
     ]
   }
 }
@@ -676,11 +1148,19 @@ class BackJuly5 extends TestCase {
           type: 'back'
         }
       }, {
+        check(result) {
+          let row = result.result.content?.[0]
+          CheckUtil.expectEqual(row != null, true, '应查到退货单')
+          CheckUtil.expectEqual(String(row.title), String(row.noteId), `退货单title应等于订单号，title=${row?.title}，noteId=${row?.noteId}`)
+        },
         buildVariable(result) {
-          let content: any[] = result.result.content
-          return { backNoteId: content[0].noteId }
+          let row = result.result.content[0]
+          return {
+            backNoteId: row.noteId,
+            backTitle: String(row.title)
+          }
         }
-      }).setRemark('取退货单 noteId'),
+      }).setRemark('取退货单 noteId，title 应等于订单号'),
       new Action({
         name: '修改退货单时间为7月5日',
         remark: 'updateNoteTime → 2026-07-05',

@@ -540,7 +540,7 @@ class NoteStatusHis extends TestCase {
       new UpdateCntAndPrice({
         name: '修改入库价格',
         changes: [
-          { name: '猪肉', price: 5 }
+          { name: '猪肉', price: 5, buyUnitFee: 1, stockBuyUnitFee: 1 }
         ]
       }).setRemark('updatePrice：猪肉单价 2→5'),
       listNoteHis({
@@ -581,7 +581,7 @@ class NoteStatusHis extends TestCase {
       new UpdateCntAndPrice({
         name: '修改入库价格和数量',
         changes: [
-          { name: '猪肉', price: 4, instockCnt: 12, buyUnitFee: 1 }
+          { name: '猪肉', price: 4, instockCnt: 12, buyUnitFee: 1, stockBuyUnitFee: 1 }
         ]
       }).setRemark('updatePrice：单价 5→4，入库数量 10→12'),
       listNoteHis({
@@ -749,6 +749,38 @@ class NoteAcceptSendHis extends TestCase {
         ],
         check(result) {
           checkNoteRow(findHis(result, item => item.tableName == 'note' && item.action == 'accept'), 'accept')
+        }
+      }),
+      new Action({
+        name: '供应商拣货',
+        remark: 'batchProcessNote pick，历史 action=picked',
+        url: '/app/note/batchProcessNote',
+        param: {
+          noteIds: '${supplierNoteIds}',
+          action: 'pick',
+          type: 'Type4Supplier',
+          warehouseId: '${supplierWarehouse.warehouseId}',
+          warehouseGroupId: '${supplierWarehouse.warehouseGroupId}'
+        }
+      }),
+      listNoteHis({
+        name: '查询拣货历史',
+        remark: 'pick 只记整单 note，不记 noteItem',
+        noteId: '${supplierNoteId}',
+        warehouseType: 'supplierWarehouse',
+        checkArray: [
+          {
+            action: 'picked',
+            tableName: 'note',
+            parentTable: 'note',
+            data: {
+              remark: '拣货'
+            }
+          }
+        ],
+        check(result) {
+          CheckUtil.expectNotFind(result.result.content ?? [], { tableName: 'noteItem', action: 'picked' })
+          checkNoteRow(findHis(result, item => item.tableName == 'note' && item.action == 'picked'), 'picked')
         }
       }),
       new Action({

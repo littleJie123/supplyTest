@@ -7,6 +7,7 @@ import AddSupplier from "../../action/supplier/AddSupplier";
 import Upload from "../../action/Upload";
 import path from "path";
 import Action from "../../action/Action";
+import ExcelUploadUtil from "../../util/ExcelUploadUtil";
 
 export default class extends TestCase {
   protected buildActions(): BaseTest[] {
@@ -36,7 +37,7 @@ export default class extends TestCase {
   buildUpload(url: string, target: String, opt?: {
     needSave: boolean
   }): BaseTest[] {
-  
+    let needSave = !!opt?.needSave;
     let ret: BaseTest[] = [new Upload({
       name: '上传' + target,
       param: {
@@ -47,36 +48,44 @@ export default class extends TestCase {
 
     }, {
       check(result) {
-        if(!opt?.needSave){
-          result = result.result.importResult;
-          CheckUtil.expectEqual(result.checked, true)
+        if (!needSave) {
+          let data = result.result;
+          if (data?.allMap) {
+            CheckUtil.expectEqual(data.importResult?.checked, true)
+          }
         }
       },
       buildVariable(result) {
-        result = result.result;
-        let fileCols = result.fileCols;
-        fileCols = fileCols.filter(row => row.targetCol != null);
-        fileCols = fileCols.map(row => ({ targetCol: row.targetCol, excelFileId: row.excelFileId }))
+        let data = result.result ?? {};
         return {
-          excelFileId: result.excelFileId,
-          fileCols
+          excelFileId: data.excelFileId,
+          fileCols: ExcelUploadUtil.buildSaveFileCols(data.fileCols),
+          allMap: !!data.allMap
         }
       }
     })
     ]
-    if (opt?.needSave) {
-      ret.push(
-        new Action({
-          name: 'saveExcel',
-          url: '/app/excel/saveExcel',
-          param: {
-            excelFileId: '${excelFileId}',
-            fileCols: '${fileCols}',
-            warehouseId: '${warehouse.warehouseId}'
-          }
-        })
-      )
+    let saveAfterProcess = needSave ? undefined : {
+      needRunVariable: {
+        key: 'allMap',
+        not: true
+      },
+      check(result) {
+        CheckUtil.expectEqual(result.result?.checked, true)
+      }
     }
+    ret.push(
+      new Action({
+        name: 'saveExcel',
+        remark: needSave ? undefined : '列未全部自动匹配时再保存导入',
+        url: '/app/excel/saveExcel',
+        param: {
+          excelFileId: '${excelFileId}',
+          fileCols: '${fileCols}',
+          warehouseId: '${warehouse.warehouseId}'
+        }
+      }, saveAfterProcess)
+    )
     return ret;
   }
   getName(): string {

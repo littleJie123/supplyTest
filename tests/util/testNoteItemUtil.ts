@@ -64,7 +64,8 @@ describe('NoteItemUtil', () => {
         instockCnt: 3,
         sendCnt: 2,
         price: 15,
-        stockBuyUnitFee: -10
+        stockBuyUnitFee: -10,
+        buyUnitFee: 1
       });
       expect(NoteItemUtil.change([item])).toHaveLength(1);
     });

@@ -71,6 +71,14 @@ export default class extends TestCase {
       }),
 
       new ProcessNote({
+        action: 'pick',
+        noteId: '${meatLinkLinkNoteId}',
+        noteItems: '${noteItems}'
+      }, {
+        warehouseType: 'supplierWarehouse'
+      }),
+
+      new ProcessNote({
         action: 'send',
         noteId: '${meatLinkLinkNoteId}',
         noteItems: '${noteItems}',
@@ -105,11 +113,11 @@ export default class extends TestCase {
       }),
 
       new ProcessNote({
-        action: 'instock',
+        action: 'outstock',
         noteId: '${meatLinkLinkNoteId}',
         noteItems: '${noteItems}',
         buildItem(item) {
-          item.instockCnt = item.sendCnt ?? item.cnt;
+          item.outstockCnt = item.sendCnt ?? item.cnt;
           return item;
         }
       }, {
@@ -350,10 +358,11 @@ export default class extends TestCase {
       return row.purcharse;
     }
     if (mode === 'send') {
-      return row.sendCnt;
+      // 发货量：供应商读自己的 sendCnt，餐厅读视图字段 linkSendCnt（对方发货，不落库同步）
+      return side === 'supplier' ? row.sendCnt : row.linkSendCnt;
     }
     if (mode === 'outstock') {
-      return side === 'supplier' ? row.instock : row.linkInstockCnt;
+      return side === 'supplier' ? row.outstock : row.linkOutstockCnt;
     }
     // instock：餐厅本方 instock，供应商 linkInstockCnt
     return side === 'store' ? row.instock : row.linkInstockCnt;
@@ -367,32 +376,33 @@ export default class extends TestCase {
     }
 
     if (mode === 'outstock') {
-      CheckUtil.expectEqual(supplier.instock != null, true, `${label}${name}供应商缺少instock`);
-      CheckUtil.expectEqual(store.linkInstockCnt != null, true, `${label}${name}餐厅缺少linkInstockCnt`);
+      CheckUtil.expectEqual(supplier.outstock != null, true, `${label}${name}供应商缺少outstock`);
+      CheckUtil.expectEqual(store.linkOutstockCnt != null, true, `${label}${name}餐厅缺少linkOutstockCnt`);
       // 供应商出库同步到餐厅：以供应商为源换算
       const materialLink = {
         unitFee: supplier.linkUnitFee,
         linkUnitFee: store.linkUnitFee
       };
-      const expectedCnt = MaterialLinkUtil.parseCnt(materialLink, supplier.instock.cnt);
+      const expectedCnt = MaterialLinkUtil.parseCnt(materialLink, supplier.outstock.cnt);
       CheckUtil.expectEqual(
         StockUtil.isEq(
-          { cnt: expectedCnt, buyUnitFee: store.linkInstockCnt.buyUnitFee },
-          store.linkInstockCnt
+          { cnt: expectedCnt, buyUnitFee: store.linkOutstockCnt.buyUnitFee },
+          store.linkOutstockCnt
         ),
         true,
-        `${label}${name}出库后餐厅linkInstockCnt与供应商instock不一致`
+        `${label}${name}出库后餐厅linkOutstockCnt与供应商outstock不一致`
       );
       CheckUtil.expectEqual(
-        StockUtil.isEq(supplier.purcharse, supplier.instock),
+        StockUtil.isEq(supplier.purcharse, supplier.outstock),
         true,
         `${label}${name}供应商出库数量应等于采购量`
       );
       return;
     }
 
-    const storeCol = mode === 'send' ? 'sendCnt' : 'purcharse';
-    const supplierCol = storeCol;
+    // 不同步数量：餐厅侧发货看视图字段 linkSendCnt，供应商侧看自己的 sendCnt
+    const storeCol = mode === 'send' ? 'linkSendCnt' : 'purcharse';
+    const supplierCol = mode === 'send' ? 'sendCnt' : 'purcharse';
     CheckUtil.expectEqual(store[storeCol] != null, true, `${label}${name}餐厅缺少${storeCol}`);
     CheckUtil.expectEqual(supplier[supplierCol] != null, true, `${label}${name}供应商缺少${supplierCol}`);
     CheckUtil.expectEqual(store.linkUnitFee != null, true, `${label}${name}主单缺少linkUnitFee`);
@@ -409,7 +419,7 @@ export default class extends TestCase {
         supplier[supplierCol]
       ),
       true,
-      `${label}${name}两端${storeCol}不一致：餐厅换算后${expectedCnt}，供应商${JSON.stringify(supplier[supplierCol])}`
+      `${label}${name}两端数量不一致（餐厅${storeCol} vs 供应商${supplierCol}）：餐厅换算后${expectedCnt}，供应商${JSON.stringify(supplier[supplierCol])}`
     );
   }
 }

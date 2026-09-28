@@ -252,6 +252,7 @@ export default class extends TestCase {
             noteItems.push({
               noteItemId: item.noteItemId,
               price,
+              buyUnitFee: item.buyUnitFee ?? 1,
               stockBuyUnitFee: 1,
               stockRecord: {
                 cost: price * item.stock,

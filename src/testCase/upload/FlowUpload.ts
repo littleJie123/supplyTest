@@ -10,6 +10,7 @@ import StockUtil from "../../util/StockUtil";
 import Recal from "../../action/Recal";
 import GetMap from "../../action/GetMap";
 import CheckStock from "../../action/CheckStock";
+import ExcelUploadUtil from "../../util/ExcelUploadUtil";
 
 /** 与 FlowUpload.md / excel 一致的固定日期 */
 const DAY_0731 = '2026-07-31';
@@ -60,14 +61,9 @@ export default class extends TestCase {
       }, {
         buildVariable(result) {
           let data = result.result ?? {};
-          let fileCols = (data.fileCols ?? []).filter((row: any) => row.targetCol != null);
-          fileCols = fileCols.map((row: any) => ({
-            targetCol: row.targetCol,
-            excelFileId: row.excelFileId
-          }));
           return {
             excelFileId: data.excelFileId,
-            fileCols,
+            fileCols: ExcelUploadUtil.buildSaveFileCols(data.fileCols),
             allMap: !!data.allMap
           };
         },
@@ -506,6 +502,98 @@ export default class extends TestCase {
         }
       }),
 
+      new Action({
+        name: '设置啤酒物料编码',
+        remark: '给啤酒写入 code=beer，供后续按编码匹配',
+        url: '/free/update',
+        param: {
+          table: 'material',
+          whereCdt: {
+            name: '啤酒',
+            warehouseGroupId: '${warehouse.warehouseGroupId}',
+            isDel: 0
+          },
+          data: {
+            code: 'beer'
+          }
+        }
+      }),
+
+      ...this.buildUploadAndSave(
+        '上传订单[物料编码匹配]',
+        'purcharse',
+        '上传订单_物料编码',
+        (importResult, topResult) => {
+          CheckUtil.expectEqual(importResult?.checked, true, '按编码匹配应上传成功');
+          let succMsg = topResult?.succMsg ?? importResult?.succMsg;
+          CheckUtil.expectEqual(succMsg != null && succMsg !== '', true, '应返回 succMsg');
+        }
+      ),
+
+      new Action({
+        name: '校验编码匹配后的订单物料',
+        remark: '名称「啤酒不存在」应按编码匹配到啤酒；数量1公斤、金额12',
+        url: '/app/note/listNote',
+        param: {
+          warehouseId: '${warehouse.warehouseId}',
+          warehouseGroupId: '${warehouse.warehouseGroupId}'
+        }
+      }, {
+        check: (result) => {
+          let content: any[] = result.result?.content ?? [];
+          let note = content.find(row => row.cost === 12);
+          CheckUtil.expectEqual(note != null, true, '应有按编码匹配的订单金额12');
+          CheckUtil.expectEqual(note?.materialCnt, 1, '编码匹配订单应为1条物料');
+        },
+        buildVariable(result) {
+          let content: any[] = result.result?.content ?? [];
+          let note = content.find(row => row.cost === 12);
+          return {
+            codeMatchNoteId: note?.noteId
+          };
+        }
+      }),
+
+      new Action({
+        name: '校验编码匹配订单明细',
+        url: '/app/noteItem/listNoteItem',
+        param: {
+          warehouseId: '${warehouse.warehouseId}',
+          warehouseGroupId: '${warehouse.warehouseGroupId}',
+          noteId: '${codeMatchNoteId}'
+        }
+      }, {
+        check: (result) => {
+          let content: any[] = result.result?.content ?? [];
+          CheckUtil.expectEqual(content.length, 1, '编码匹配订单应有1条明细');
+          CheckUtil.expectEqual(content[0]?.name, '啤酒', '应按编码匹配到啤酒，而不是啤酒不存在');
+          this.checkNoteItemRow(content[0], {
+            name: '啤酒',
+            price: 12,
+            priceBuyUnitFee: -1000,
+            cnt: 1,
+            cntBuyUnitFee: -1000,
+            instockCost: 12
+          });
+        }
+      }),
+
+      new Action({
+        name: '校验未新建错误物料名',
+        url: '/app/material/listMaterialByCategory',
+        param: {
+          warehouseId: '${warehouse.warehouseId}',
+          warehouseGroupId: '${warehouse.warehouseGroupId}'
+        }
+      }, {
+        check(result) {
+          let content: any[] = result.result?.content ?? [];
+          let names = content.map(row => row.name);
+          CheckUtil.expectEqual(names.includes('啤酒不存在'), false, '不应新建物料「啤酒不存在」');
+          CheckUtil.expectEqual(names.includes('啤酒'), true, '啤酒应仍存在');
+        }
+      }),
+
       ...this.buildUploadAndSave(
         '上传盘点[失败-0731]',
         'inventory',
@@ -585,8 +673,8 @@ export default class extends TestCase {
         array: [
           // 07-31盘点2升 + 08-01入库8升 = 10升 = 10000ml；标准单位瓶，fee=500 表示 ml
           { materialId: '${material.白酒}', cnt: 10000, buyUnitFee: 500 },
-          // 07-31盘点2斤(1公斤) + 08-01入库10公斤
-          { materialId: '${material.啤酒}', cnt: 11, buyUnitFee: -1000 },
+          // 07-31盘点2斤(1公斤) + 08-01入库10公斤 + 09-01按编码匹配入库1公斤
+          { materialId: '${material.啤酒}', cnt: 12, buyUnitFee: -1000 },
           // 07-31盘点2瓶 + 08-02入库30瓶
           { materialId: '${material.可乐}', cnt: 32, buyUnitFee: -1000 },
           // 仅08-02入库20瓶

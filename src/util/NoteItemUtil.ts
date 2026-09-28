@@ -112,6 +112,10 @@ export default class {
 
     }
     ret.materialId = item.materialId;
+    ret.buyUnitFee = item.buyUnitFee ?? item.instock?.buyUnitFee ?? item.purcharse?.buyUnitFee;
+    if (ret.stockBuyUnitFee == null) {
+      ret.stockBuyUnitFee = item.stockBuyUnitFee;
+    }
     return ret;
   }
 

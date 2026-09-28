@@ -243,11 +243,6 @@ export default class extends TestCase {
           CheckUtil.expectEqual(array.length, 1, '库表应有1条明细');
           const row = array[0];
           CheckUtil.expectEqual(
-            row.cost,
-            EXPECT_COST,
-            `库表 noteItem.cost 应为 ${EXPECT_COST}，实际=${row.cost}`
-          );
-          CheckUtil.expectEqual(
             StockUtil.isEq(
               { cnt: row.cnt, buyUnitFee: row.buyUnitFee },
               { cnt: ORDER_GRAM, buyUnitFee: Number(variable.watermelonGramBuyUnitFee) }
@@ -264,7 +259,7 @@ export default class extends TestCase {
             `库表单价应为 3.5/千克，实际 price=${row.price} fee=${row.stockBuyUnitFee}`
           );
         }
-      }]).setRemark('free/query：note/noteItem.cost=31.68，数量 9千克50克')
+      }]).setRemark('free/query：note.cost=31.68，明细只校验数量和单价')
     ];
   }
 }

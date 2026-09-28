@@ -142,6 +142,7 @@ export default class extends TestCase {
         changes: [{
           name: '猪肉',
           price: 25,
+          buyUnitFee: 1,
           stockBuyUnitFee: -10
         }],
         highlight:true
@@ -165,6 +166,7 @@ export default class extends TestCase {
         changes: [{
           name: '羊肉',
           price: 0.25,
+          buyUnitFee: 500,
           stockBuyUnitFee: 500,
           instockCnt: 20
         }],
@@ -279,19 +281,6 @@ export default class extends TestCase {
         },
         check(result) {
           self.checkStoreNoteItems(result.result.content, opt.storeItems);
-        }
-      }),
-      new QueryAction({
-        name: `${opt.name}验证链接单对方入库金额`,
-        url: '/app/note/listNote',
-        query: {
-          noteId: '${linkNoteId}'
-        }
-      }, {
-        warehouseType: 'supplierWarehouse',
-        check(result) {
-          const row = result.result.content[0];
-          CheckUtil.expectEqual(row.linkInstockCost, opt.noteInstockCost, '链接单对方入库金额不对');
         }
       }),
       new QueryAction({

@@ -16,7 +16,7 @@
 
 1. **只改价格**：用户修正入库单价，入库数量不变。
 2. **改价格 + 改数量**：用户同时修正入库单价与实收数量（例如部分入库后调整）。
-3. **重要**:修改价格填入的数量，必须是listNoteItem接口查出来的buyUnitFee下的数量（buyUnitFee不变），StockInp默认返回的buyUnitFee是不变的。
+3. **重要**:`updatePrice` 的 `buyUnitFee`、`stockBuyUnitFee` **必填**。`instockCnt` 必须是该 `buyUnitFee` 下的数量（与 `listNoteItem` 的 `instock.cnt` 同口径）。StockInp 默认返回的 buyUnitFee 不变。
 
 > 接口路径仍为 `updatePrice`，行为已扩展为可同时更新 `instockCnt`。
 
@@ -31,7 +31,8 @@
       noteItemId: 12345,      // 必填
       materialId: 100,        // 建议传，便于排查
       price: 25,              // 新单价
-      stockBuyUnitFee: -10,   // 与 price 配套的单位系数，需与物料一致
+      stockBuyUnitFee: -10,   // 与 price 配套，必填
+      buyUnitFee: 1,          // 与 instockCnt 配套，必填
       instockCnt: 20          // 可选；不传表示不改入库数量
     }
   ]
@@ -44,7 +45,8 @@
 |------|------|------|------|
 | `noteItems[].noteItemId` | number | 是 | 订单物料 ID |
 | `noteItems[].price` | number | 改价时必填 | 新采购单价 |
-| `noteItems[].stockBuyUnitFee` | number | 改价时必填 | 价格单位系数，与下单/入库时一致 |
+| `noteItems[].stockBuyUnitFee` | number | 是 | 价格单位系数，与下单/入库时一致 |
+| `noteItems[].buyUnitFee` | number | 是 | 数量单位系数，与 `instockCnt` 配套 |
 | `noteItems[].instockCnt` | number | 否 | 新入库数量；**不传则保持原入库数量** |
 
 ## 请求示例
@@ -61,7 +63,8 @@
     noteItemId: 10001,
     materialId: 20001,
     price: 25,
-    stockBuyUnitFee: -10
+    stockBuyUnitFee: -10,
+    buyUnitFee: 1
   }]
 }
 ```
@@ -79,6 +82,7 @@
     materialId: 20002,
     price: 0.25,
     stockBuyUnitFee: 500,
+    buyUnitFee: 500,
     instockCnt: 20
   }]
 }
@@ -94,18 +98,18 @@
 | 步骤 | 操作 | 预期 |
 |------|------|------|
 | 供应商接单 | linkNote | 产生链接单，餐厅单 `linkNoteId` 有值 |
-| 入库后 | — | 餐厅单/链接单 `instockCost = 846`；库存数量与金额正确 |
-| 只改猪肉价 21→25 | 不传 `instockCnt` | 餐厅单/链接单 `instockCost=1006`；猪肉库存金额 1000；链接单 noteItem 同步 |
-| 改羊肉价 0.2→0.25，量 30→20 | 传 `price` + `instockCnt` | 餐厅单/链接单 `instockCost=1005`；羊肉库存 cnt=20、cost=5；链接单 noteItem 同步 |
+| 入库后 | — | 餐厅单 `instockCost = 846`；库存数量与金额正确；链接单明细 `linkInstockCnt` / `linkPrice` / `linkInstockCost` 与餐厅入库一致 |
+| 只改猪肉价 21→25 | 不传 `instockCnt` | 餐厅单 `instockCost=1006`；猪肉库存金额 1000；链接单明细同步 |
+| 改羊肉价 0.2→0.25，量 30→20 | 传 `price` + `instockCnt` | 餐厅单 `instockCost=1005`；羊肉库存 cnt=20、cost=5；链接单明细同步 |
 
 每次改价/改量后均会：先 `recal` 重算库存，再 `CheckStock` 校验数量，并校验 `stock` 表金额及链接单 noteItem。
 
 ## 前端注意事项
 
 1. **改价必带 `stockBuyUnitFee`**，与物料采购单位一致，否则单价换算会错。
-2. **只改价时不要传 `instockCnt`**（或传原值），避免误改数量。
-3. **改量时 `instockCnt` 单位**与 `listNoteItem` 返回的 `instock.cnt` 一致（采购单位下的数量）。
-4. 存在**链接单**时，服务端会同步 `linkInstockCnt`、`linkInstockCost`、`linkPrice`。测试比对时用 `StockUtil.isEq`（库存）和 `StockUtil.isEqPrice`（价格），字段映射见 `LinkNoteItemUtil`。
+2. **改量/改价都必带 `buyUnitFee`**，与 `listNoteItem` 的 `instock.buyUnitFee` 一致。
+3. **只改价时不要传 `instockCnt`**（或传原值），避免误改数量。
+4. 存在**链接单**时，对方入库数量/价格/金额从关联 `noteItem` 组装（`listNoteItem` 的 `linkInstockCnt`、`linkPrice`、`linkInstockCost`），**不要**再读 `listNote.linkInstockCost`。测试比对时用 `StockUtil.isEq`（库存）和 `StockUtil.isEqPrice`（价格），字段映射见 `LinkNoteItemUtil`。
 
 ## 自动化测试
 

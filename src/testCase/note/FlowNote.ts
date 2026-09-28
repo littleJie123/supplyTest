@@ -337,15 +337,13 @@ export default class extends TestCase {
         name: '验证手动单',
         url: '/app/note/listNote',
         query: {
-          status: "instocked"
+          status: "instocked",
+          origin: 'hand'
         }
       }, {
         buildVariable(result) {
           let content: any[] = result.result.content;
-          content = content.filter(row => {
-            let title: string = row.title
-            return title.startsWith('手')
-          })
+          content = content.filter(row => row.origin == 'hand')
           CheckUtil.expectFindByArray(content, [
             { cost: 300 },
             { cost: 600 }

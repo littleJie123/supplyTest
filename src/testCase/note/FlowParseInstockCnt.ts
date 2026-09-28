@@ -10,14 +10,13 @@ import CheckArray from "../../action/CheckArray";
 import Action from "../../action/Action";
 
 /**
- * 验证 updatePrice → parseInstockCnt：
- * 不传 buyUnitFee 时，instockCnt 按 noteItem.stockUnitsId（箱）理解，换算成 buyUnitFee（瓶）入库。
+ * 验证 updatePrice 必填 buyUnitFee、stockBuyUnitFee：instockCnt 按请求 buyUnitFee 落库。
  *
- * 牛肉：1 箱 = 5 瓶；下单 stockUnitsId=箱；改量为 5 箱 → 库表应为 25 瓶。
+ * 牛肉下单 10 瓶（buyUnitFee=1）；改量为 25 瓶，库表 buyUnitFee 仍为 1。
  */
 export default class extends TestCase {
   constructor() {
-    super({ remark: 'parseInstockCnt：牛肉按箱改量，换算为瓶后落库' });
+    super({ remark: 'buyUnitFee/stockBuyUnitFee 必填：牛肉按订单瓶口径改量为25' });
   }
 
   getName(): string {
@@ -143,15 +142,16 @@ export default class extends TestCase {
       }).setRemark('记下 noteItems，供 updatePrice 使用'),
 
       new UpdateCntAndPrice({
-        name: '按箱改牛肉入库量为5箱',
+        name: '按订单瓶口径改牛肉入库量为25',
         changes: [{
           name: '牛肉',
           price: 10,
+          buyUnitFee: 1,
           stockBuyUnitFee: -5,
-          instockCnt: 5
+          instockCnt: 25
         }],
         highlight: true
-      }).setRemark('不传 buyUnitFee；instockCnt=5 箱 → 应换算为 25 瓶'),
+      }).setRemark('buyUnitFee=1、stockBuyUnitFee=-5 必填；instockCnt=25 瓶'),
 
       new CheckArray([{
         table: 'noteItem',
@@ -165,7 +165,7 @@ export default class extends TestCase {
           CheckUtil.expectEqual(array[0].instockCnt, 25, '库表 instockCnt 应为25瓶');
           CheckUtil.expectEqual(array[0].buyUnitFee, 1, '库表 buyUnitFee 应为1(瓶)');
         }
-      }]).setRemark('free/query 校验库表：5箱 → 25瓶'),
+      }]).setRemark('free/query 校验库表：instockCnt=25、buyUnitFee 仍为1'),
 
       new Recal().setRemark('重算库存'),
       new CheckStock({

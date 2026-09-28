@@ -203,6 +203,22 @@ export default class extends TestCase {
       }),
 
       new BatchProcessNote({
+        action: 'pick'
+      }, {
+        warehouseType: 'supplierWarehouse'
+      }),
+
+      new ListNoteGroup({
+        len: 1,
+        noteCnt: 2,
+        status: 'picked',
+        type: 'Type4Supplier'
+      }, {
+        warehouseType: 'supplierWarehouse',
+
+      }),
+
+      new BatchProcessNote({
         action: 'send'
       }, {
         warehouseType: 'supplierWarehouse'
@@ -219,7 +235,7 @@ export default class extends TestCase {
       }),
 
       new BatchProcessNote({
-        action: 'instock',
+        action: 'outstock',
 
       }, {
         warehouseType: 'supplierWarehouse'
@@ -228,7 +244,7 @@ export default class extends TestCase {
       new ListNoteGroup({
         len: 1,
         noteCnt: 2,
-        status: 'instocked',
+        status: 'outstocked',
         type: 'Type4Supplier'
       }, {
         warehouseType: 'supplierWarehouse',
@@ -247,13 +263,13 @@ export default class extends TestCase {
           array: [
             {
               query: {
-                warehouseId: '${warehouse.warehouseId}',
+                warehouseId: '${supplierWarehouse.warehouseId}',
               },
               table: 'noteItem'
             },
             {
               query: {
-                warehouseId: '${warehouse.warehouseId}',
+                warehouseId: '${supplierWarehouse.warehouseId}',
               },
               table: 'note'
             }
@@ -263,8 +279,12 @@ export default class extends TestCase {
         check(result) {
           result = result.result;
           let note: any[] = result.note;
-          note = note.filter(row => row.linkStatementCost > 0);
-          CheckUtil.expectEqual(note.length > 0, true);
+          note = note.filter(row => row.statementCost > 0);
+          CheckUtil.expectEqual(note.length > 0, true, '供应商订单结算金额应大于0');
+          let noteItems: any[] = result.noteItem;
+          for (let row of noteItems) {
+            CheckUtil.expectEqual(Number(row.statementCnt), Number(row.outstockCnt), '供应商明细结算数量应等于出库数量');
+          }
         }
       }),
 
@@ -303,7 +323,7 @@ export default class extends TestCase {
         check(result) {
           let content = result.result.content;
           for (let row of content) {
-            CheckUtil.expectEqualObj(row.purcharse, row.instock)
+            CheckUtil.expectEqualObj(row.purcharse, row.outstock)
             CheckUtil.expectEqualObj(row.purcharse, row.sendCnt)
           }
         },
@@ -339,8 +359,7 @@ export default class extends TestCase {
           CheckUtil.expectEqual(cnt * 500, variable.cntAndPrice.cnt, '物料数量不对')
           CheckUtil.expectEqual(price, variable.cntAndPrice.price * 500, `价格不对,期望为${variable.cntAndPrice.price * 500},实际是${price}`)
           for (let row of content) {
-            CheckUtil.expectEqualObj(row.purcharse, row.linkInstockCnt)
-            CheckUtil.expectEqualObj(row.purcharse, row.sendCnt)
+            CheckUtil.expectEqualObj(row.purcharse, row.linkOutstockCnt)
           }
         },
       }),
@@ -421,6 +440,25 @@ export default class extends TestCase {
         warehouseType: 'supplierWarehouse'
       }),
       new ProcessNote({
+        action: 'pick',
+        noteId: '${noteId}',
+        noteItems: "${noteItems}"
+      }, {
+        warehouseType: 'supplierWarehouse'
+      }),
+      new QueryAction({
+        name: '查询订单',
+        url: '/app/note/listNote',
+        query: {
+          status: 'picked'
+        },
+        checkers: {
+          len: 1
+        }
+      }, {
+        warehouseType: 'supplierWarehouse'
+      }),
+      new ProcessNote({
         action: 'send',
         noteId: '${noteId}',
         noteItems: "${noteItems}",
@@ -443,17 +481,27 @@ export default class extends TestCase {
       }, {
         warehouseType: 'supplierWarehouse'
       }),
-      ... this.buildCheckNoteItem('sendCnt', {
-        checkItems(item) {
-          CheckUtil.expectEqual(item.purcharse.cnt / 2, item.sendCnt.cnt)
+      new QueryAction({
+        name: '验证供应商发货数量',
+        url: '/app/noteItem/listNoteItem',
+        query: {
+          noteId: '${noteId}',
+        }
+      }, {
+        warehouseType: 'supplierWarehouse',
+        check(result) {
+          let content = result.result.content;
+          for (let item of content) {
+            CheckUtil.expectEqual(item.purcharse.cnt / 2, item.sendCnt.cnt)
+          }
         }
       }),
       new ProcessNote({
-        action: 'instock',
+        action: 'outstock',
         noteId: '${noteId}',
         noteItems: "${noteItems}",
         buildItem(item) {
-          item.instockCnt = item.cnt / 2
+          item.outstockCnt = item.cnt / 2
           return item;
         }
       }, {
@@ -471,14 +519,14 @@ export default class extends TestCase {
       }, {
         warehouseType: 'supplierWarehouse'
       }),
-      ... this.buildCheckNoteItem('instock', {
+      ... this.buildCheckNoteItem('outstock', {
         checkSupplierItems(item) {
-          CheckUtil.expectEqual(item.purcharse.cnt / 2, item.instock.cnt)
+          CheckUtil.expectEqual(item.purcharse.cnt / 2, item.outstock.cnt)
         },
         checkItems(item) {
-          CheckUtil.expectEqual(item.purcharse.cnt / 2, item.linkInstockCnt.cnt)
+          CheckUtil.expectEqual(item.purcharse.cnt / 2, item.linkOutstockCnt.cnt)
         },
-        targetCol: 'linkInstockCnt'
+        targetCol: 'linkOutstockCnt'
       }),
 
       new CreateNote3M(),
@@ -602,8 +650,8 @@ export default class extends TestCase {
       }),
       ... this.buildInstockActions(),
 
-      ... this.buildCheckNoteItem('instock', {
-        targetCol: 'linkInstockCnt',
+      ... this.buildCheckNoteItem('outstock', {
+        targetCol: 'linkOutstockCnt',
         feeMap: {
           羊肉: 10
         }
@@ -627,6 +675,14 @@ export default class extends TestCase {
       }),
 
       new ProcessNote({
+        action: 'pick',
+        noteId: '${noteId}',
+        noteItems: "${noteItems}"
+      }, {
+        warehouseType: 'supplierWarehouse'
+      }),
+
+      new ProcessNote({
         action: 'send',
         noteId: '${noteId}',
         noteItems: "${noteItems}",
@@ -638,11 +694,11 @@ export default class extends TestCase {
         warehouseType: 'supplierWarehouse'
       }),
       new ProcessNote({
-        action: 'instock',
+        action: 'outstock',
         noteId: '${noteId}',
         noteItems: "${noteItems}",
         buildItem(item) {
-          item.instockCnt = item.cnt / 2
+          item.outstockCnt = item.cnt / 2
           return item;
         }
       }, {

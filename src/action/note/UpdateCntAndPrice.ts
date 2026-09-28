@@ -4,11 +4,12 @@ interface ItemChange {
   /** 物料名称，与 noteItems 中 name 匹配 */
   name: string;
   price?: number;
-  stockBuyUnitFee?: number;
-  /** 不传则不改入库数量；传入时按采购单位(stockUnitsId)数量，服务端 parseInstockCnt 换算 */
+  /** 价格单位系数，必填 */
+  stockBuyUnitFee: number;
+  /** 不传则不改入库数量；口径为 buyUnitFee */
   instockCnt?: number;
-  /** 传入则跳过 parseInstockCnt 换算，按订单 buyUnitFee 直接落库 */
-  buyUnitFee?: number;
+  /** 数量单位系数，必填 */
+  buyUnitFee: number;
 }
 
 interface Opt {
@@ -42,18 +43,15 @@ export default class extends HttpAction {
         const change = changeMap.get(row.name);
         const item: any = {
           noteItemId: row.noteItemId,
-          materialId: row.materialId
+          materialId: row.materialId,
+          buyUnitFee: change.buyUnitFee,
+          stockBuyUnitFee: change.stockBuyUnitFee
         };
         if (change.price != null) {
           item.price = change.price;
-          item.stockBuyUnitFee = change.stockBuyUnitFee ?? row.stockBuyUnitFee;
         }
         if (change.instockCnt != null) {
-          // 不传 buyUnitFee：模拟客户端；服务端用库里 buyUnitFee 做 parseInstockCnt 目标
           item.instockCnt = change.instockCnt;
-        }
-        if (change.buyUnitFee != null) {
-          item.buyUnitFee = change.buyUnitFee;
         }
         return item;
       });
