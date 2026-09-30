@@ -26,6 +26,38 @@ function readVar(variable: any, path: string): any {
   return cur
 }
 
+/** 取日期字符串的 yyyy-MM-dd */
+function dayOf(value: any): string {
+  if (value == null) {
+    return ''
+  }
+  return String(value).substring(0, 10)
+}
+
+/** 断言 noteItem 入库操作人与时间 */
+function checkInstockOp(rows: any[], usersId: any, expectDay: string | null, label: string) {
+  CheckUtil.expectEqual(rows.length > 0, true, `${label}应有明细`)
+  for (let row of rows) {
+    CheckUtil.expectEqual(
+      Number(row.instockUser),
+      Number(usersId),
+      `${label} noteItemId=${row.noteItemId} instockUser 应为${usersId}，实际=${row.instockUser}`
+    )
+    CheckUtil.expectEqual(
+      row.instockTime != null,
+      true,
+      `${label} noteItemId=${row.noteItemId} instockTime 不应为空`
+    )
+    if (expectDay != null) {
+      CheckUtil.expectEqual(
+        dayOf(row.instockTime),
+        expectDay,
+        `${label} noteItemId=${row.noteItemId} instockTime 应为${expectDay}，实际=${row.instockTime}`
+      )
+    }
+  }
+}
+
 /**
  * 牛肉完整周期：6/30 按包盘点，再改规格 1包=100g，随后按克进货、按包销售、订单入库、退货、7/6报损、7/31 再盘点，
  * 最后 updatePrice 改 7/4 入库量价，改价前后各打一次 analysyMaterial，再下载报表（不含结算单）。
@@ -127,6 +159,29 @@ export default class extends TestCase {
         }
       }),
 
+      new QueryAction({
+        name: '记下手工单供操作人校验',
+        url: '/app/note/listNote',
+        query: {
+          status: 'instocked',
+          origin: 'hand'
+        }
+      }, {
+        buildVariable(result) {
+          let row = (result.result.content ?? []).find((item: any) => item.origin == 'hand')
+          return { handNoteIdForOp: row?.noteId }
+        }
+      }),
+      new QueryAction({
+        name: '校验手工入库操作人时间',
+        url: '/app/noteItem/listNoteItem',
+        query: { noteId: '${handNoteIdForOp}' }
+      }, {
+        check(result) {
+          checkInstockOp(result.result.content ?? [], variable.usersId, '2026-07-02', '手工入库')
+        }
+      }).setRemark('手工入库：校验 instockUser=当前用户，instockTime=2026-07-02'),
+
       new UploadSalesJuly3(),
 
       new OrderInstockJuly4(),
@@ -188,7 +243,77 @@ export default class extends TestCase {
       }, variable),
 
       this.buildPsiCheck(),
-      ...this.buildDownloadSteps(variable)
+      ...this.buildDownloadSteps(variable),
+      ...this.buildBatchInstockOpCheck(variable)
+    ]
+  }
+
+  /**
+   * 批量途径入库：额外下一单并 batchProcessNote，校验操作人与时间（不影响主流程库存断言）。
+   */
+  private buildBatchInstockOpCheck(variable: any): BaseTest[] {
+    return [
+      new Action({
+        name: '批量途径：再下一单牛肉1包',
+        remark: '覆盖 batchProcessNote 入库途径，与主流程 processNote 区分',
+        url: '/app/note/createNote',
+        method: 'POST',
+        param: {
+          warehouseId: '${warehouse.warehouseId}',
+          warehouseGroupId: '${warehouse.warehouseGroupId}',
+          items: [{
+            materialId: '${materialMap.牛肉.materialId}',
+            supplierId: '${supplierMap.供应商1}',
+            cnt: 1,
+            buyUnitFee: 1,
+            price: 100,
+            stockBuyUnitFee: 1
+          }]
+        }
+      }, {
+        buildVariable(result) {
+          let content: any[] = result.result
+          return {
+            batchOpNoteIds: ArrayUtil.toArray(content, 'noteId'),
+            batchOpNote: content[0]
+          }
+        }
+      }),
+      new Action({
+        name: '批量途径：发送订单',
+        url: '/app/note/sendNote',
+        param: {
+          noteIds: '${batchOpNoteIds}',
+          status: 'normal'
+        }
+      }),
+      new Action({
+        name: '批量途径：batchProcessNote入库',
+        remark: '批量入库，校验 instockUser/instockTime',
+        url: '/app/note/batchProcessNote',
+        method: 'POST',
+        param: {
+          action: 'instock',
+          noteIds: [],
+          type: 'purcharse',
+          warehouseId: '${warehouse.warehouseId}',
+          warehouseGroupId: '${warehouse.warehouseGroupId}'
+        }
+      }, {
+        parseHttpParam(param, variable) {
+          param.noteIds = variable.batchOpNoteIds
+          return param
+        }
+      }),
+      new QueryAction({
+        name: '校验批量途径入库操作人时间',
+        url: '/app/noteItem/listNoteItem',
+        query: { noteId: '${batchOpNote.noteId}' }
+      }, {
+        check(result) {
+          checkInstockOp(result.result.content ?? [], variable.usersId, null, '批量途径入库')
+        }
+      }).setRemark('批量途径：校验 instockUser/instockTime')
     ]
   }
 
@@ -937,6 +1062,7 @@ class OrderInstockJuly4 extends TestCase {
   }
 
   protected buildActions(): BaseTest[] {
+    let variable = this.getVariable()
     return [
       new Action({
         name: 'createNote(牛2包)',
@@ -979,7 +1105,7 @@ class OrderInstockJuly4 extends TestCase {
       }).setRemark('待入库分组'),
       new Action({
         name: '入库processNote',
-        remark: '全量入库',
+        remark: '物料途径全量入库',
         url: '/app/note/processNote',
         param: {
           noteId: '${note.noteId}',
@@ -1003,7 +1129,7 @@ class OrderInstockJuly4 extends TestCase {
       }),
       new Action({
         name: '修改订单时间为7月4日',
-        remark: 'updateNoteTime → 2026-07-04',
+        remark: 'updateNoteTime → 2026-07-04，同步 noteItem.instockTime',
         url: '/app/note/updateNoteTime',
         param: {
           noteId: '${note.noteId}',
@@ -1011,7 +1137,16 @@ class OrderInstockJuly4 extends TestCase {
           warehouseId: '${warehouse.warehouseId}',
           warehouseGroupId: '${warehouse.warehouseGroupId}'
         }
-      })
+      }),
+      new QueryAction({
+        name: '校验物料途径入库操作人时间',
+        url: '/app/noteItem/listNoteItem',
+        query: { noteId: '${note.noteId}' }
+      }, {
+        check(result) {
+          checkInstockOp(result.result.content ?? [], variable.usersId, '2026-07-04', '物料途径入库+改时间')
+        }
+      }).setRemark('物料途径：校验 instockUser，且 updateNoteTime 后 instockTime=2026-07-04')
     ]
   }
 }

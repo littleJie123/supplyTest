@@ -304,7 +304,7 @@ export default class extends TestCase {
   }
 
   getName(): string {
-    return '链接单逻辑';
+    return '供应商接单流程';
   }
 
   protected buildActions(): BaseTest[] {
@@ -643,54 +643,158 @@ export default class extends TestCase {
         };
       }
     }));
+    // 门店A/C：物料途径 processNote；门店B：批量途径 batchProcessNote
     for (const store of STORES) {
-      actions.push(
-        new ProcessNote({
-          action: 'pick',
-          noteId: `\${${store.key}LinkNoteId}`,
-          noteItems: `\${${store.key}SupplierNoteItems}`
-        }, {
-          warehouseType: 'supplierWarehouse'
-        }),
-        new ProcessNote({
-          action: 'send',
-          noteId: `\${${store.key}LinkNoteId}`,
-          noteItems: `\${${store.key}SupplierNoteItems}`,
-          buildItem(item) {
-            item.sendCnt = item.cnt;
-            return item;
-          }
-        }, {
-          warehouseType: 'supplierWarehouse'
-        }),
-        new QueryAction({
-          name: `${store.title}加载供应商明细供出库`,
-          url: '/app/noteItem/listNoteItem',
-          query: {
-            noteId: `\${${store.key}LinkNoteId}`
-          }
-        }, {
-          warehouseType: 'supplierWarehouse',
-          buildVariable(result) {
-            return {
-              [`${store.key}SupplierNoteItems`]: result.result.content ?? []
-            };
-          }
-        }),
-        new ProcessNote({
-          action: 'outstock',
-          noteId: `\${${store.key}LinkNoteId}`,
-          noteItems: `\${${store.key}SupplierNoteItems}`,
-          buildItem(item) {
-            item.outstockCnt = item.sendCnt ?? item.cnt;
-            return item;
-          }
-        }, {
-          warehouseType: 'supplierWarehouse'
-        })
-      );
+      if (store.key === 'storeB') {
+        actions.push(...this.buildSupplierOutByBatch(store));
+      } else {
+        actions.push(...this.buildSupplierOutByItem(store));
+      }
+      actions.push(this.buildCheckSupplierOp(store));
     }
     return actions;
+  }
+
+  /** 物料途径：processNote 拣货/发货/出库 */
+  private buildSupplierOutByItem(store: StoreDef): BaseTest[] {
+    return [
+      new ProcessNote({
+        action: 'pick',
+        noteId: `\${${store.key}LinkNoteId}`,
+        noteItems: `\${${store.key}SupplierNoteItems}`
+      }, {
+        warehouseType: 'supplierWarehouse'
+      }).setRemark(`${store.title}物料途径拣货`),
+      new ProcessNote({
+        action: 'send',
+        noteId: `\${${store.key}LinkNoteId}`,
+        noteItems: `\${${store.key}SupplierNoteItems}`,
+        buildItem(item) {
+          item.sendCnt = item.cnt;
+          return item;
+        }
+      }, {
+        warehouseType: 'supplierWarehouse'
+      }).setRemark(`${store.title}物料途径发货`),
+      new QueryAction({
+        name: `${store.title}加载供应商明细供出库`,
+        url: '/app/noteItem/listNoteItem',
+        query: {
+          noteId: `\${${store.key}LinkNoteId}`
+        }
+      }, {
+        warehouseType: 'supplierWarehouse',
+        buildVariable(result) {
+          return {
+            [`${store.key}SupplierNoteItems`]: result.result.content ?? []
+          };
+        }
+      }),
+      new ProcessNote({
+        action: 'outstock',
+        noteId: `\${${store.key}LinkNoteId}`,
+        noteItems: `\${${store.key}SupplierNoteItems}`,
+        buildItem(item) {
+          item.outstockCnt = item.sendCnt ?? item.cnt;
+          return item;
+        }
+      }, {
+        warehouseType: 'supplierWarehouse'
+      }).setRemark(`${store.title}物料途径出库`)
+    ];
+  }
+
+  /** 批量途径：batchProcessNote 拣货/发货/出库 */
+  private buildSupplierOutByBatch(store: StoreDef): BaseTest[] {
+    const actions: BaseTest[] = [];
+    for (const action of ['pick', 'send', 'outstock'] as const) {
+      actions.push(new Action({
+        name: `${store.title}批量${action}`,
+        remark: `${store.title}批量途径 ${action}`,
+        url: '/app/note/batchProcessNote',
+        method: 'POST',
+        param: {
+          action,
+          noteIds: [],
+          type: 'send',
+          warehouseId: '${supplierWarehouse.warehouseId}',
+          warehouseGroupId: '${supplierWarehouse.warehouseGroupId}'
+        }
+      }, {
+        warehouseType: 'supplierWarehouse',
+        parseHttpParam(param, variable) {
+          param.noteIds = [variable[`${store.key}LinkNoteId`]];
+          return param;
+        }
+      }));
+    }
+    // 发货后重载明细，供后续库存校验读 sendCnt
+    actions.push(new QueryAction({
+      name: `${store.title}批量后重载明细`,
+      url: '/app/noteItem/listNoteItem',
+      query: {
+        noteId: `\${${store.key}LinkNoteId}`
+      }
+    }, {
+      warehouseType: 'supplierWarehouse',
+      buildVariable(result) {
+        return {
+          [`${store.key}SupplierNoteItems`]: result.result.content ?? []
+        };
+      }
+    }));
+    return actions;
+  }
+
+  /** 校验拣货/发货/出库的操作人与时间已写入 */
+  private buildCheckSupplierOp(store: StoreDef): BaseTest {
+    const variable = this.getVariable();
+    return new QueryAction({
+      name: `${store.title}校验拣货发货出库操作人时间`,
+      url: '/app/noteItem/listNoteItem',
+      query: {
+        noteId: `\${${store.key}LinkNoteId}`
+      }
+    }, {
+      warehouseType: 'supplierWarehouse',
+      check(result) {
+        const array = result.result.content ?? [];
+        CheckUtil.expectEqual(array.length > 0, true, `${store.title}出库后应有明细`);
+        const usersId = Number(variable.usersId);
+        for (const row of array) {
+          CheckUtil.expectEqual(
+            Number(row.pickUser),
+            usersId,
+            `${store.title}${row.noteItemId} pickUser 应为当前用户${usersId}，实际=${row.pickUser}`
+          );
+          CheckUtil.expectEqual(
+            row.pickTime != null && row.pickTime !== '',
+            true,
+            `${store.title}${row.noteItemId} pickTime 不应为空`
+          );
+          CheckUtil.expectEqual(
+            Number(row.sendUser),
+            usersId,
+            `${store.title}${row.noteItemId} sendUser 应为当前用户${usersId}，实际=${row.sendUser}`
+          );
+          CheckUtil.expectEqual(
+            row.sendTime != null && row.sendTime !== '',
+            true,
+            `${store.title}${row.noteItemId} sendTime 不应为空`
+          );
+          CheckUtil.expectEqual(
+            Number(row.outstockUser),
+            usersId,
+            `${store.title}${row.noteItemId} outstockUser 应为当前用户${usersId}，实际=${row.outstockUser}`
+          );
+          CheckUtil.expectEqual(
+            row.outStockTime != null && row.outStockTime !== '',
+            true,
+            `${store.title}${row.noteItemId} outStockTime 不应为空`
+          );
+        }
+      }
+    }).setRemark(`${store.title}校验拣货/发货/出库操作人与时间`);
   }
 
   /**

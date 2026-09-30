@@ -9,6 +9,7 @@ import ChangeWarehouse from "../../action/user/ChangeWarehouse";
 import CheckArray from "../../action/CheckArray";
 import ExcelUploadUtil from "../../util/ExcelUploadUtil";
 import StockUtil from "../../util/StockUtil";
+import { AddWarehouseUsers } from "../user/AddWarehouseUsers";
 
 /** 盘点在发货数量之上再加的数量，保证扣减后库存仍大于 0 */
 const INIT_EXTRA = 100;
@@ -20,6 +21,68 @@ function inventoryDay() {
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${date.getFullYear()}-${month}-${day}`;
+}
+
+class SaveLogin extends BaseTest {
+  private tokenKey: string;
+  private usersKey: string;
+
+  constructor(tokenKey: string, usersKey: string) {
+    super();
+    this.tokenKey = tokenKey;
+    this.usersKey = usersKey;
+    this.remark = '记下当前登录用户与仓库';
+  }
+
+  getName(): string {
+    return '保存当前登录';
+  }
+
+  protected async doTest(): Promise<any> {
+  }
+
+  protected buildVariable() {
+    let variable = this.getVariable();
+    return {
+      [this.tokenKey]: variable.token,
+      [this.usersKey]: variable.usersId,
+      // GetOpenId 注册其他用户会覆盖 warehouse，这里一并保存供切回
+      mainWarehouse: variable.warehouse
+    };
+  }
+}
+
+class UseLogin extends BaseTest {
+  private tokenKey: string;
+  private usersKey?: string;
+
+  constructor(tokenKey: string, usersKey?: string) {
+    super();
+    this.tokenKey = tokenKey;
+    this.usersKey = usersKey;
+    this.remark = `切换登录 ${tokenKey}`;
+  }
+
+  getName(): string {
+    return `切换登录${this.tokenKey}`;
+  }
+
+  protected async doTest(): Promise<any> {
+  }
+
+  protected buildVariable() {
+    let variable = this.getVariable();
+    let ret: any = {
+      token: variable[this.tokenKey]
+    };
+    if (this.usersKey != null) {
+      ret.usersId = variable[this.usersKey];
+    }
+    if (variable.mainWarehouse != null) {
+      ret.warehouse = variable.mainWarehouse;
+    }
+    return ret;
+  }
 }
 
 /**
@@ -141,6 +204,12 @@ export default class extends TestCase {
       } else if (err.errorCode === 'noSupplier') {
         CheckUtil.expectEqual(btns.length, 1);
         CheckUtil.expectEqual(btns[0].value, 'downloadExcelSupplier');
+      } else if (err.errorCode === 'noStore') {
+        CheckUtil.expectEqual(btns.length, 1);
+        CheckUtil.expectEqual(btns[0].value, 'downloadExcelStore');
+      } else if (err.errorCode === 'noUsers') {
+        CheckUtil.expectEqual(btns.length, 1);
+        CheckUtil.expectEqual(btns[0].value, 'downloadExcelUsers');
       } else {
         CheckUtil.expectEqual(btns.length, 1, `${err.errorCode} 应仅有一个按钮`);
         CheckUtil.expectEqual(btns[0].value, 'downloadExcelError');
@@ -251,6 +320,31 @@ export default class extends TestCase {
         type: 'supplier'
       }).setRemark('新建供应商仓库'),
       new ChangeWarehouse().setRemark('切换到供应商仓库'),
+      new SaveLogin('mainToken', 'mainUsersId'),
+      new Action({
+        name: '设置主用户昵称',
+        remark: '主用户 name/nickName=测试操作人（getNickName 优先 name）',
+        url: '/free/update',
+        param: {
+          table: 'users',
+          cdts: [
+            { col: 'usersId', val: '${mainUsersId}' }
+          ],
+          data: {
+            nickName: '测试操作人',
+            name: '测试操作人'
+          }
+        }
+      }),
+      new AddWarehouseUsers({
+        warehouseKey: 'warehouse',
+        remark: '新增阿大、阿二，共3个操作用户',
+        users: [
+          { key: 'ada', nickName: '阿大' },
+          { key: 'aer', nickName: '阿二' }
+        ]
+      }),
+      new UseLogin('mainToken', 'mainUsersId'),
 
       new Action({
         name: '新增物料[荔枝]',
@@ -509,7 +603,7 @@ export default class extends TestCase {
             `应有价格为空失败，实际=${msgs}`
           );
           CheckUtil.expectEqual(
-            msgs.includes('供应商不存在') || array.some((row: any) => row.errorCode === 'noSupplier'),
+            msgs.includes('餐厅不存在') || array.some((row: any) => row.errorCode === 'noStore'),
             true,
             `应有门店不存在失败，实际=${msgs}`
           );
@@ -587,28 +681,16 @@ export default class extends TestCase {
         }
       }),
 
-      new Action({
-        name: '设置拣货人昵称',
-        remark: '导入按 nickName 匹配拣货人',
-        url: '/app/users/updateUsers',
-        param: {
-          nickName: '测试拣货人',
-          img: [],
-          warehouseId: '${warehouse.warehouseId}',
-          warehouseGroupId: '${warehouse.warehouseGroupId}'
-        }
-      }),
-
       ...this.buildUploadAndSave(
         '上传订单[失败]',
-        'note',
+        'noteOutStocked',
         '上传订单失败',
         (importResult) => {
           this.checkFailImport(importResult);
           let errors: any[] = importResult?.errors ?? [];
           let codes = errors.map(row => row.errorCode);
           CheckUtil.expectEqual(codes.includes('noMaterial'), true, '应有物料不存在');
-          CheckUtil.expectEqual(codes.includes('noSupplier'), true, '应有餐厅不存在');
+          CheckUtil.expectEqual(codes.includes('noStore'), true, '应有餐厅不存在');
         },
         undefined,
         { status: 'outstocked' }
@@ -670,10 +752,14 @@ export default class extends TestCase {
 
       ...this.buildUploadAndSave(
         '上传订单[出库]',
-        'note',
+        'noteOutStocked',
         '上传订单成功',
         (importResult, topResult) => {
-          CheckUtil.expectEqual(importResult?.checked, true, '订单上传成功 checked 应为 true');
+          if (importResult?.checked !== true) {
+            let errors: any[] = importResult?.errors ?? [];
+            let detail = errors.map(e => `${e.errorCode}:${e.errorMsg ?? e.msg ?? ''}`).join('; ');
+            CheckUtil.expectEqual(importResult?.checked, true, `订单上传成功 checked 应为 true，errors=[${detail}]`);
+          }
           let succMsg = topResult?.succMsg ?? importResult?.succMsg;
           CheckUtil.expectEqual(succMsg, '一共上传了5条物料，共3个订单，金额为444。');
         },
@@ -714,7 +800,7 @@ export default class extends TestCase {
 
       new Action({
         name: '校验出库订单物料',
-        remark: '数量规则、结算清空、公斤回落到库存单位、拣货人',
+        remark: '数量规则、结算清空、公斤回落到库存单位、操作人与时间',
         url: '/app/noteItem/listNoteItem',
         param: {
           warehouseId: '${warehouse.warehouseId}',
@@ -759,8 +845,34 @@ export default class extends TestCase {
           CheckUtil.expectEqual(apple1?.stockUnitsId, stockUnits['苹果'], '斤应写入苹果库存单位');
           CheckUtil.expectEqual(apple2?.stockUnitsId, stockUnits['苹果'], '公斤不在规格中应回落到苹果库存单位');
           CheckUtil.expectEqual(lizhi?.stockUnitsId, stockUnits['荔枝'], '包应写入荔枝库存单位');
-          for (let row of [apple1, apple2, grape, peach, lizhi]) {
-            CheckUtil.expectEqual(row?.userOfPicker?.name, '测试拣货人', `${row?.name} 拣货人`);
+          let v = this.getVariable();
+          for (let row of [apple1, grape, peach]) {
+            this.checkSupplierUploadOp(row, {
+              name: row?.name,
+              createUser: row?.name === '桃子' ? '李四' : '张三',
+              acceptUsersId: v.adaUsersId,
+              pickUsersId: v.aerUsersId,
+              sendUsersId: v.mainUsersId,
+              outstockUsersId: v.adaUsersId,
+              acceptDay: '2026-08-28',
+              pickDay: '2026-08-29',
+              sendDay: '2026-08-30',
+              outstockDay: '2026-08-31'
+            });
+          }
+          for (let row of [lizhi, apple2]) {
+            this.checkSupplierUploadOp(row, {
+              name: row?.name,
+              createUser: '张三',
+              acceptUsersId: v.adaUsersId,
+              pickUsersId: v.aerUsersId,
+              sendUsersId: v.mainUsersId,
+              outstockUsersId: v.adaUsersId,
+              acceptDay: '2026-09-01',
+              pickDay: '2026-09-01',
+              sendDay: '2026-09-02',
+              outstockDay: '2026-09-02'
+            });
           }
         }
       }),
@@ -792,7 +904,7 @@ export default class extends TestCase {
 
       ...this.buildUploadAndSave(
         '上传订单[待发货]',
-        'note',
+        'noteOutStocked',
         '上传订单待发货',
         (importResult, topResult) => {
           CheckUtil.expectEqual(importResult?.checked, true, '待发货上传 checked 应为 true');
@@ -876,7 +988,7 @@ export default class extends TestCase {
 
       ...this.buildUploadAndSave(
         '上传订单[发货]',
-        'note',
+        'noteOutStocked',
         '上传订单发货',
         (importResult, topResult) => {
           CheckUtil.expectEqual(importResult?.checked, true, '发货上传 checked 应为 true');
@@ -948,7 +1060,14 @@ export default class extends TestCase {
           this.checkCnt(row?.outstock, null, '香蕉入库不应写入');
           this.checkCnt(row?.statementCnt, null, '香蕉结算不应写入');
           this.checkCnt(row?.instock, null, '香蕉门店入库数量不应写入');
-          CheckUtil.expectEqual(row?.userOfPicker?.name, '测试拣货人', '香蕉拣货人');
+          let v = this.getVariable();
+          CheckUtil.expectEqual(row?.userOfPicker?.name, '阿二', '香蕉拣货人');
+          CheckUtil.expectEqual(Number(row?.pickUser), Number(v.aerUsersId), '香蕉 pickUser=阿二');
+          CheckUtil.expectEqual(Number(row?.sendUser), Number(v.mainUsersId), '香蕉 sendUser=测试操作人');
+          CheckUtil.expectEqual(Number(row?.acceptUser), Number(v.adaUsersId), '香蕉 acceptUser=阿大');
+          CheckUtil.expectEqual(this.dayOf(row?.pickTime), '2026-09-04', '香蕉 pickTime');
+          CheckUtil.expectEqual(this.dayOf(row?.sendTime), '2026-09-04', '香蕉 sendTime');
+          CheckUtil.expectEqual(row?.createUser, '王五', '香蕉订货人');
         }
       }),
 
@@ -977,7 +1096,7 @@ export default class extends TestCase {
 
       ...this.buildUploadAndSave(
         '上传订单[结算]',
-        'note',
+        'noteOutStocked',
         '上传订单结算',
         (importResult, topResult) => {
           CheckUtil.expectEqual(importResult?.checked, true, '结算上传 checked 应为 true');
@@ -1063,7 +1182,133 @@ export default class extends TestCase {
           this.checkStockRow(stocks, ids['香蕉'], this.stockAfterSend('香蕉', 5, -500));
         }
       }),
+
+      ...this.buildUploadAndSave(
+        '上传订单[重复物料]',
+        'noteOutStocked',
+        '上传订单_重复物料合并',
+        (importResult, topResult) => {
+          CheckUtil.expectEqual(importResult?.checked, true, '重复物料上传 checked 应为 true');
+          let succMsg = topResult?.succMsg ?? importResult?.succMsg;
+          CheckUtil.expectEqual(succMsg, '一共上传了1条物料，共1个订单，金额为78。');
+        },
+        undefined,
+        { status: 'outstocked' }
+      ),
+
+      new Action({
+        name: '校验重复物料合并后的订单',
+        remark: '同单同物料合并为1条；金额78',
+        url: '/app/note/listNote',
+        param: {
+          warehouseId: '${warehouse.warehouseId}',
+          warehouseGroupId: '${warehouse.warehouseGroupId}',
+          status: 'outstocked'
+        }
+      }, {
+        check: (result) => {
+          let content: any[] = result.result?.content ?? [];
+          let note = content.find(row =>
+            row.supplierName === '面包店' && String(row.createTime ?? '').indexOf('2026-09-10') >= 0
+          );
+          CheckUtil.expectEqual(note != null, true, '应有9/10面包店重复物料订单');
+          CheckUtil.expectEqual(note?.materialCnt, 1, '合并后应为1条物料');
+          CheckUtil.expectEqual(Number(note?.cost), 78, '合并后订货金额应为78');
+        },
+        buildVariable(result) {
+          let content: any[] = result.result?.content ?? [];
+          let note = content.find(row =>
+            row.supplierName === '面包店' && String(row.createTime ?? '').indexOf('2026-09-10') >= 0
+          );
+          return {
+            dupNoteId: note?.noteId
+          };
+        }
+      }),
+
+      new Action({
+        name: '校验重复物料合并明细与操作人时间',
+        remark: '数量累加、金额倒算价；操作人/时间取第一行',
+        url: '/app/noteItem/listNoteItem',
+        param: {
+          warehouseId: '${warehouse.warehouseId}',
+          warehouseGroupId: '${warehouse.warehouseGroupId}',
+          noteId: '${dupNoteId}'
+        }
+      }, {
+        check: (result) => {
+          let content: any[] = result.result?.content ?? [];
+          CheckUtil.expectEqual(content.length, 1, '合并后应只有1条明细');
+          let row = content[0];
+          let fee = -500;
+          CheckUtil.expectEqual(row?.name, '香蕉', '物料应为香蕉');
+          this.checkOrderPrice(row, { name: '香蕉合并', price: 15.6, buyUnitFee: fee });
+          this.checkCnt(row?.purcharse, { cnt: 5, buyUnitFee: fee }, '香蕉合并订货');
+          this.checkCnt(row?.pick, { cnt: 3, buyUnitFee: fee }, '香蕉合并拣货');
+          this.checkCnt(row?.sendCnt, { cnt: 3, buyUnitFee: fee }, '香蕉合并发货');
+          this.checkCnt(row?.outstock, { cnt: 3, buyUnitFee: fee }, '香蕉合并出库');
+          let v = this.getVariable();
+          this.checkSupplierUploadOp(row, {
+            name: '香蕉合并',
+            createUser: '合并订货人',
+            acceptUsersId: v.adaUsersId,
+            pickUsersId: v.aerUsersId,
+            sendUsersId: v.mainUsersId,
+            outstockUsersId: v.adaUsersId,
+            acceptDay: '2026-09-07',
+            pickDay: '2026-09-08',
+            sendDay: '2026-09-09',
+            outstockDay: '2026-09-10'
+          });
+        }
+      }),
+
+      new Action({
+        name: '阿二设为管理员',
+        remark: '将最后新增的用户阿二 usersWarehouse.isAdmin=1',
+        url: '/free/update',
+        param: {
+          table: 'usersWarehouse',
+          cdts: [
+            { col: 'usersId', val: '${aerUsersId}' },
+            { col: 'warehouseId', val: '${warehouse.warehouseId}' }
+          ],
+          data: { isAdmin: 1 }
+        }
+      }),
     ];
+  }
+
+  private dayOf(value: any): string {
+    if (value == null) {
+      return '';
+    }
+    return String(value).substring(0, 10);
+  }
+
+  private checkSupplierUploadOp(row: any, opt: {
+    name: string;
+    createUser: string;
+    acceptUsersId: any;
+    pickUsersId: any;
+    sendUsersId: any;
+    outstockUsersId: any;
+    acceptDay: string;
+    pickDay: string;
+    sendDay: string;
+    outstockDay: string;
+  }) {
+    CheckUtil.expectEqual(row != null, true, `${opt.name} 应有明细`);
+    CheckUtil.expectEqual(row?.createUser, opt.createUser, `${opt.name} createUser`);
+    CheckUtil.expectEqual(Number(row?.acceptUser), Number(opt.acceptUsersId), `${opt.name} acceptUser=阿大`);
+    CheckUtil.expectEqual(Number(row?.pickUser), Number(opt.pickUsersId), `${opt.name} pickUser=阿二`);
+    CheckUtil.expectEqual(Number(row?.sendUser), Number(opt.sendUsersId), `${opt.name} sendUser=测试操作人`);
+    CheckUtil.expectEqual(Number(row?.outstockUser), Number(opt.outstockUsersId), `${opt.name} outstockUser=阿大`);
+    CheckUtil.expectEqual(this.dayOf(row?.acceptTime), opt.acceptDay, `${opt.name} acceptTime`);
+    CheckUtil.expectEqual(this.dayOf(row?.pickTime), opt.pickDay, `${opt.name} pickTime`);
+    CheckUtil.expectEqual(this.dayOf(row?.sendTime), opt.sendDay, `${opt.name} sendTime`);
+    CheckUtil.expectEqual(this.dayOf(row?.outStockTime), opt.outstockDay, `${opt.name} outStockTime`);
+    CheckUtil.expectEqual(row?.userOfPicker?.name, '阿二', `${opt.name} userOfPicker`);
   }
 
   private checkUploadedNote(note: any, opt: {

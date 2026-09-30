@@ -194,6 +194,7 @@ export default class extends TestCase {
     cnt: number;
     cntBuyUnitFee: number;
     instockCost: number;
+    instockDay?: string;
   }) {
     CheckUtil.expectEqual(row != null, true, `应有${opt.name}`);
     let sm = row.supplierMaterial;
@@ -216,6 +217,18 @@ export default class extends TestCase {
       `${opt.name} 数量不对`
     );
     CheckUtil.expectEqual(row.instockCost ?? row.cost, opt.instockCost, `${opt.name} 金额`);
+    if (opt.instockDay != null) {
+      CheckUtil.expectEqual(
+        Number(row.instockUser),
+        Number(this.getVariable().usersId),
+        `${opt.name} instockUser 应为当前用户`
+      );
+      CheckUtil.expectEqual(
+        String(row.instockTime ?? '').substring(0, 10),
+        opt.instockDay,
+        `${opt.name} instockTime 应为 ${opt.instockDay}`
+      );
+    }
   }
 
   private checkInventoryQty(row: any, opt: {
@@ -455,7 +468,7 @@ export default class extends TestCase {
 
       new Action({
         name: '校验成功订单物料',
-        remark: '价格取 supplierMaterial，数量取 instock，用 StockUtil 比较',
+        remark: '价格取 supplierMaterial，数量取 instock；校验 instockUser/instockTime',
         url: '/app/noteItem/listNoteItem',
         param: {
           warehouseId: '${warehouse.warehouseId}',
@@ -472,7 +485,8 @@ export default class extends TestCase {
             priceBuyUnitFee: -1000,
             cnt: 10,
             cntBuyUnitFee: -1000,
-            instockCost: 120
+            instockCost: 120,
+            instockDay: '2026-08-01'
           });
           this.checkNoteItemRow(content.find(row => row.name === '白酒'), {
             name: '白酒',
@@ -481,7 +495,8 @@ export default class extends TestCase {
             priceBuyUnitFee: -2,
             cnt: 8000,
             cntBuyUnitFee: 500,
-            instockCost: 32
+            instockCost: 32,
+            instockDay: '2026-08-01'
           });
           this.checkNoteItemRow(content.find(row => row.name === '汽水'), {
             name: '汽水',
@@ -489,7 +504,8 @@ export default class extends TestCase {
             priceBuyUnitFee: 1,
             cnt: 20,
             cntBuyUnitFee: 1,
-            instockCost: 200
+            instockCost: 200,
+            instockDay: '2026-08-02'
           });
           this.checkNoteItemRow(content.find(row => row.name === '可乐'), {
             name: '可乐',
@@ -497,7 +513,8 @@ export default class extends TestCase {
             priceBuyUnitFee: -1000,
             cnt: 30,
             cntBuyUnitFee: -1000,
-            instockCost: 450
+            instockCost: 450,
+            instockDay: '2026-08-02'
           });
         }
       }),
@@ -949,6 +966,67 @@ export default class extends TestCase {
 
       new Recal().setRemark('销售后重算库存，再下进销存'),
       this.buildPsiCheck(),
+
+      // 放在进销存之后，避免多出的采购影响 07-31 后 CheckStock / 八月 psi
+      ...this.buildUploadAndSave(
+        '上传订单[重复物料]',
+        'purcharse',
+        '上传订单_重复物料',
+        (importResult, topResult) => {
+          CheckUtil.expectEqual(importResult?.checked, true, '重复物料上传 checked 应为 true');
+          let succMsg = topResult?.succMsg ?? importResult?.succMsg;
+          CheckUtil.expectEqual(succMsg, '一共上传了1条物料，共1个订单，金额为78。');
+        }
+      ),
+
+      new Action({
+        name: '校验重复物料合并后的订单',
+        remark: '同供应商同日期啤酒两行合并为1条，金额78',
+        url: '/app/note/listNote',
+        param: {
+          warehouseId: '${warehouse.warehouseId}',
+          warehouseGroupId: '${warehouse.warehouseGroupId}'
+        }
+      }, {
+        check: (result) => {
+          let content: any[] = result.result?.content ?? [];
+          let note = content.find(row => Number(row.cost) === 78);
+          CheckUtil.expectEqual(note != null, true, '应有重复物料合并订单金额78');
+          CheckUtil.expectEqual(note?.materialCnt, 1, '合并后应为1条物料');
+        },
+        buildVariable(result) {
+          let content: any[] = result.result?.content ?? [];
+          let note = content.find(row => Number(row.cost) === 78);
+          return {
+            dupNoteId: note?.noteId
+          };
+        }
+      }),
+
+      new Action({
+        name: '校验重复物料合并明细与入库操作人时间',
+        remark: '数量累加、金额倒算价；instockUser=当前用户，instockTime=订单日期',
+        url: '/app/noteItem/listNoteItem',
+        param: {
+          warehouseId: '${warehouse.warehouseId}',
+          warehouseGroupId: '${warehouse.warehouseGroupId}',
+          noteId: '${dupNoteId}'
+        }
+      }, {
+        check: (result) => {
+          let content: any[] = result.result?.content ?? [];
+          CheckUtil.expectEqual(content.length, 1, '合并后应只有1条明细');
+          this.checkNoteItemRow(content[0], {
+            name: '啤酒合并',
+            price: 15.6,
+            priceBuyUnitFee: -1000,
+            cnt: 5,
+            cntBuyUnitFee: -1000,
+            instockCost: 78,
+            instockDay: '2026-09-10'
+          });
+        }
+      }),
     ];
   }
 

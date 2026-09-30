@@ -5,6 +5,7 @@ import AddWarehouse from "../../action/warehouse/AddWarehouse";
 import Action from "../../action/Action";
 import QueryAction from "../../action/QueryAction";
 import SaveShareData from "../../action/shareData/SaveShareData";
+import NoteItemUtil from "../../util/NoteItemUtil";
 import StockUtil from "../../util/StockUtil";
 import IOpt from "../../inf/IOpt";
 import { AddWarehouseUsers } from "../user/AddWarehouseUsers";
@@ -131,7 +132,7 @@ function unitBuyUnitFee(material: any, unit: any): number {
 }
 
 function isEmptyCell(val: any): boolean {
-  return val == null || val === '';
+  return val == null || val === '' || Number(val) === 0;
 }
 
 function checkCnt(actual: any, expected: number, tag: string) {
@@ -266,6 +267,7 @@ class CreateStoreNote extends HttpAction {
 class CheckStateNote4SupplierExcel extends MultiSheetDownloadAction {
   private storeNames: string[];
   private expects: MaterialExpect[];
+  private sendExpects: MaterialExpect[];
 
   constructor(opt: {
     name: string;
@@ -274,6 +276,7 @@ class CheckStateNote4SupplierExcel extends MultiSheetDownloadAction {
     end?: string;
     storeNames: string[];
     expects: MaterialExpect[];
+    sendExpects: MaterialExpect[];
   }) {
     super({
       name: opt.name,
@@ -289,39 +292,54 @@ class CheckStateNote4SupplierExcel extends MultiSheetDownloadAction {
     });
     this.storeNames = opt.storeNames;
     this.expects = opt.expects;
+    this.sendExpects = opt.sendExpects;
   }
 
   protected async checkResult(sheets: any): Promise<void> {
     await super.checkResult(sheets);
-    let rows = sheets['门店销售数量汇总'];
+    this.checkQtySheet(sheets, '订货数量合计', '订货数量合计', this.expects);
+    this.checkQtySheet(sheets, '发货数量合计', '发货数量合计', this.sendExpects);
+  }
+
+  private checkQtySheet(
+    sheets: any,
+    sheetName: string,
+    totalCol: string,
+    expects: MaterialExpect[]
+  ) {
+    let rows = sheets[sheetName];
     CheckUtil.expectEqual(rows != null, true,
-      `缺少sheet「门店销售数量汇总」，实际=${JSON.stringify(Object.keys(sheets ?? {}))}`);
-    CheckUtil.expectEqual(rows.length, this.expects.length,
-      `物料行数期望${this.expects.length}，实际${rows.length}，${JSON.stringify(rows)}`);
+      `缺少sheet「${sheetName}」，实际=${JSON.stringify(Object.keys(sheets ?? {}))}`);
+    CheckUtil.expectEqual(rows.length, expects.length,
+      `${sheetName}物料行数期望${expects.length}，实际${rows.length}，${JSON.stringify(rows)}`);
+    if (expects.length === 0) {
+      return;
+    }
     let sample = rows[0] ?? {};
     for (let storeName of this.storeNames) {
       CheckUtil.expectEqual(storeName in sample, true,
-        `应有门店列「${storeName}」，实际列=${JSON.stringify(Object.keys(sample))}`);
+        `${sheetName}应有门店列「${storeName}」，实际列=${JSON.stringify(Object.keys(sample))}`);
     }
     let extraStores = ['门店A', '门店B', '门店C'].filter(name =>
       this.storeNames.indexOf(name) < 0 && name in sample
     );
     CheckUtil.expectEqual(extraStores.length, 0,
-      `不应出现门店列${JSON.stringify(extraStores)}，实际列=${JSON.stringify(Object.keys(sample))}`);
-    for (let expect of this.expects) {
+      `${sheetName}不应出现门店列${JSON.stringify(extraStores)}，实际列=${JSON.stringify(Object.keys(sample))}`);
+    for (let expect of expects) {
       let row = rows.find((r: any) => r['物料名'] == expect.name);
-      CheckUtil.expectEqual(row != null, true, `缺少物料「${expect.name}」，实际=${JSON.stringify(rows)}`);
+      CheckUtil.expectEqual(row != null, true,
+        `${sheetName}缺少物料「${expect.name}」，实际=${JSON.stringify(rows)}`);
       CheckUtil.expectEqual(row['单位'], expect.unit,
-        `${expect.name}.单位期望${expect.unit}，实际${row['单位']}`);
-      checkCnt(row['数量合计'], expect.total, `${expect.name}.数量合计`);
+        `${sheetName} ${expect.name}.单位期望${expect.unit}，实际${row['单位']}`);
+      checkCnt(row[totalCol], expect.total, `${sheetName} ${expect.name}.${totalCol}`);
       for (let storeName of this.storeNames) {
         let actual = row[storeName];
         let storeExpect = expect.stores[storeName];
         if (storeExpect === '' || storeExpect == null) {
           CheckUtil.expectEqual(isEmptyCell(actual), true,
-            `${expect.name}.${storeName}应为空，实际=${actual}`);
+            `${sheetName} ${expect.name}.${storeName}应为空，实际=${actual}`);
         } else {
-          checkCnt(actual, storeExpect as number, `${expect.name}.${storeName}`);
+          checkCnt(actual, storeExpect as number, `${sheetName} ${expect.name}.${storeName}`);
         }
       }
     }
@@ -770,6 +788,7 @@ export default class extends TestCase {
           { key: 'pickerC' }
         ]
       }),
+      ...this.setPickerAdmin(['pickerA', 'pickerB', 'pickerC']),
       new UseLogin('supplierToken'),
       ...this.buildStore(STORES[0]),
       ...this.buildStore(STORES[1]),
@@ -788,7 +807,7 @@ export default class extends TestCase {
       new ChangeToWarehouse('supplierWarehouse', '切换到供应商仓下载报表'),
       this.buildExcelCheck({
         name: '下载08-01至08-15',
-        remark: 'begin=2026-08-01 end=2026-08-15，三门店两批订货都计入',
+        remark: 'begin=2026-08-01 end=2026-08-15，三门店两批订货都计入；仅门店C已发货，荔枝发货为订货一半',
         begin: '2026-08-01',
         end: '2026-08-15',
         storeNames: ['门店A', '门店B', '门店C'],
@@ -798,11 +817,18 @@ export default class extends TestCase {
           { name: '西瓜', unit: '包', total: 45.5, stores: { '门店A': 15.5, '门店B': 15, '门店C': 15 } },
           { name: '葡萄', unit: '斤', total: 110, stores: { '门店A': 40, '门店B': 40, '门店C': 30 } },
           { name: '荔枝', unit: '斤', total: 4, stores: { '门店A': '', '门店B': '', '门店C': 4 } }
+        ],
+        sendExpects: [
+          { name: '香蕉', unit: '包', total: 5, stores: { '门店A': '', '门店B': '', '门店C': 5 } },
+          { name: '苹果', unit: '包', total: 0.1, stores: { '门店A': '', '门店B': '', '门店C': 0.1 } },
+          { name: '西瓜', unit: '包', total: 15, stores: { '门店A': '', '门店B': '', '门店C': 15 } },
+          { name: '葡萄', unit: '斤', total: 30, stores: { '门店A': '', '门店B': '', '门店C': 30 } },
+          { name: '荔枝', unit: '斤', total: 2, stores: { '门店A': '', '门店B': '', '门店C': 2 } }
         ]
       }),
       this.buildExcelCheck({
         name: '下载仅08-01',
-        remark: '只传begin=2026-08-01，end自动填成同一天',
+        remark: '只传begin=2026-08-01，end自动填成同一天；荔枝发货≠订货',
         begin: '2026-08-01',
         storeNames: ['门店A', '门店B', '门店C'],
         expects: [
@@ -811,11 +837,18 @@ export default class extends TestCase {
           { name: '西瓜', unit: '包', total: 45, stores: { '门店A': 15, '门店B': 15, '门店C': 15 } },
           { name: '葡萄', unit: '斤', total: 90, stores: { '门店A': 20, '门店B': 40, '门店C': 30 } },
           { name: '荔枝', unit: '斤', total: 4, stores: { '门店A': '', '门店B': '', '门店C': 4 } }
+        ],
+        sendExpects: [
+          { name: '香蕉', unit: '包', total: 5, stores: { '门店A': '', '门店B': '', '门店C': 5 } },
+          { name: '苹果', unit: '包', total: 0.1, stores: { '门店A': '', '门店B': '', '门店C': 0.1 } },
+          { name: '西瓜', unit: '包', total: 15, stores: { '门店A': '', '门店B': '', '门店C': 15 } },
+          { name: '葡萄', unit: '斤', total: 30, stores: { '门店A': '', '门店B': '', '门店C': 30 } },
+          { name: '荔枝', unit: '斤', total: 2, stores: { '门店A': '', '门店B': '', '门店C': 2 } }
         ]
       }),
       this.buildExcelCheck({
         name: '下载仅08-15',
-        remark: '只传begin=2026-08-15，门店C未订货不出现',
+        remark: '只传begin=2026-08-15，门店C未订货不出现；门店A、B未发货，发货sheet无数据',
         begin: '2026-08-15',
         storeNames: ['门店A', '门店B'],
         expects: [
@@ -823,17 +856,18 @@ export default class extends TestCase {
           { name: '苹果', unit: '包', total: 0.02, stores: { '门店A': '', '门店B': 0.02 } },
           { name: '西瓜', unit: '包', total: 0.5, stores: { '门店A': 0.5, '门店B': '' } },
           { name: '葡萄', unit: '斤', total: 20, stores: { '门店A': 20, '门店B': '' } }
-        ]
+        ],
+        sendExpects: []
       }),
       this.buildSalesExcel({
         name: '销售情况08-01至08-15',
-        remark: '门店A、B都已拣货为待发货；门店C已结算',
+        remark: '门店A、B都已拣货为待发货；门店C已结算，荔枝发货为订货一半',
         begin: '2026-08-01',
         end: '2026-08-15',
         stores: [
           { name: '门店A', orderCnt: 2, status: salesStatus(0, 0, 0, 0, 2), orderMoney: 305 },
           { name: '门店B', orderCnt: 2, status: salesStatus(0, 0, 0, 0, 2), orderMoney: 149 },
-          { name: '门店C', orderCnt: 1, status: salesStatus(0, 0, 0, 1), orderMoney: 150, sendMoney: 150, outstockMoney: 150, statementMoney: 150 }
+          { name: '门店C', orderCnt: 1, status: salesStatus(0, 0, 0, 1), orderMoney: 150, sendMoney: 140, outstockMoney: 140, statementMoney: 140 }
         ],
         orders: {
           '门店A': [
@@ -845,7 +879,7 @@ export default class extends TestCase {
             { noteKey: 'storeBNote0815Id', day: '2026-08-15', status: '待发货', materialCnt: 2, orderMoney: 14 }
           ],
           '门店C': [
-            { noteKey: 'storeCNote0801Id', day: '2026-08-01', status: '已对账', materialCnt: 5, orderMoney: 150, statementMoney: 150 }
+            { noteKey: 'storeCNote0801Id', day: '2026-08-01', status: '已对账', materialCnt: 5, orderMoney: 150, statementMoney: 140 }
           ]
         },
         materials: {
@@ -864,18 +898,18 @@ export default class extends TestCase {
           ],
           '门店C': [
             { noteKey: 'storeCNote0801Id', name: '葡萄', unit: '斤', orderCnt: 30, price: 0.5, orderMoney: 15, statementCnt: 30, statementMoney: 15 },
-            { noteKey: 'storeCNote0801Id', name: '荔枝', unit: '斤', orderCnt: 4, price: 5, orderMoney: 20, statementCnt: 4, statementMoney: 20 }
+            { noteKey: 'storeCNote0801Id', name: '荔枝', unit: '斤', orderCnt: 4, price: 5, orderMoney: 20, statementCnt: 2, statementMoney: 10 }
           ]
         }
       }),
       this.buildSalesExcel({
         name: '销售情况仅08-01',
-        remark: '只传begin，end补成同一天。门店A、B待发货，门店C已结算',
+        remark: '只传begin，end补成同一天。门店A、B待发货，门店C已结算，荔枝发货为订货一半',
         begin: '2026-08-01',
         stores: [
           { name: '门店A', orderCnt: 1, status: salesStatus(0, 0, 0, 0, 1), orderMoney: 135 },
           { name: '门店B', orderCnt: 1, status: salesStatus(0, 0, 0, 0, 1), orderMoney: 135 },
-          { name: '门店C', orderCnt: 1, status: salesStatus(0, 0, 0, 1), orderMoney: 150, sendMoney: 150, outstockMoney: 150, statementMoney: 150 }
+          { name: '门店C', orderCnt: 1, status: salesStatus(0, 0, 0, 1), orderMoney: 150, sendMoney: 140, outstockMoney: 140, statementMoney: 140 }
         ],
         orders: {
           '门店A': [
@@ -885,7 +919,7 @@ export default class extends TestCase {
             { noteKey: 'storeBNote0801Id', day: '2026-08-01', status: '待发货', materialCnt: 4, orderMoney: 135 }
           ],
           '门店C': [
-            { noteKey: 'storeCNote0801Id', day: '2026-08-01', status: '已对账', materialCnt: 5, orderMoney: 150, statementMoney: 150 }
+            { noteKey: 'storeCNote0801Id', day: '2026-08-01', status: '已对账', materialCnt: 5, orderMoney: 150, statementMoney: 140 }
           ]
         },
         materials: {
@@ -896,7 +930,7 @@ export default class extends TestCase {
             { noteKey: 'storeBNote0801Id', name: '葡萄', unit: '斤', orderCnt: 40, price: 0.5, orderMoney: 20 }
           ],
           '门店C': [
-            { noteKey: 'storeCNote0801Id', name: '荔枝', unit: '斤', orderCnt: 4, price: 5, orderMoney: 20, statementCnt: 4, statementMoney: 20 }
+            { noteKey: 'storeCNote0801Id', name: '荔枝', unit: '斤', orderCnt: 4, price: 5, orderMoney: 20, statementCnt: 2, statementMoney: 10 }
           ]
         }
       }),
@@ -928,6 +962,25 @@ export default class extends TestCase {
       }),
       this.buildPickerExcel()
     ];
+  }
+
+  /**
+   * 新增分拣人后，将 usersWarehouse.isAdmin 设为 1
+   */
+  private setPickerAdmin(pickerKeys: string[]): BaseTest[] {
+    return pickerKeys.map(key => new Action({
+      name: `${key}设为管理员`,
+      remark: `/free/update usersWarehouse isAdmin=1`,
+      url: '/free/update',
+      param: {
+        table: 'usersWarehouse',
+        cdts: [
+          { col: 'usersId', val: `\${${key}UsersId}` },
+          { col: 'warehouseId', val: '${supplierWarehouse.warehouseId}' }
+        ],
+        data: { isAdmin: 1 }
+      }
+    }));
   }
 
   /**
@@ -1047,6 +1100,7 @@ export default class extends TestCase {
     end?: string;
     storeNames: string[];
     expects: MaterialExpect[];
+    sendExpects: MaterialExpect[];
   }): CheckStateNote4SupplierExcel {
     return new CheckStateNote4SupplierExcel(opt);
   }
@@ -1148,12 +1202,15 @@ export default class extends TestCase {
       new ChangeToWarehouse('supplierWarehouse', '切换到供应商仓下载退货'),
       this.buildExcelCheck({
         name: '退货数量08-20',
-        remark: '退货单香蕉数量为负数',
+        remark: '退货单香蕉订货为负数；发货sheet只有门店C荔枝，退货无发货数量',
         begin: '2026-08-20',
         end: '2026-08-20',
         storeNames: ['门店A', '门店C'],
         expects: [
           { name: '香蕉', unit: '包', total: -1, stores: { '门店A': -1, '门店C': '' } },
+          { name: '荔枝', unit: '斤', total: 2, stores: { '门店A': '', '门店C': 2 } }
+        ],
+        sendExpects: [
           { name: '荔枝', unit: '斤', total: 2, stores: { '门店A': '', '门店C': 2 } }
         ]
       }),
@@ -1483,13 +1540,69 @@ export default class extends TestCase {
   }
 
   private buildStoreCStatement(): BaseTest[] {
-    const actions = ['pick', 'send', 'outstock', 'statement'] as const;
-    const titles = { pick: '拣货', send: '发货', outstock: '出库', statement: '结算' };
     return [
       new ChangeToWarehouse('supplierWarehouse', '切换到供应商仓结算门店C'),
-      ...actions.map(action => new Action({
-        name: `门店C${titles[action]}`,
-        remark: `供应商将门店C的08-01订单${titles[action]}`,
+      new Action({
+        name: '门店C拣货',
+        remark: '供应商将门店C的08-01订单拣货',
+        url: '/app/note/batchProcessNote',
+        method: 'POST',
+        param: {
+          action: 'pick',
+          noteIds: [],
+          type: 'send',
+          warehouseId: '${supplierWarehouse.warehouseId}',
+          warehouseGroupId: '${supplierWarehouse.warehouseGroupId}'
+        }
+      }, {
+        parseHttpParam(param, variable) {
+          param.noteIds = [variable.storeCLinkNote0801Id];
+          return param;
+        }
+      }),
+      new Action({
+        name: '查询门店C08-01明细',
+        remark: '发货前读取明细，荔枝发货数量改为订货一半',
+        url: '/app/noteItem/listNoteItem',
+        param: {
+          noteId: '${storeCLinkNote0801Id}'
+        }
+      }, {
+        warehouseType: 'supplierWarehouse',
+        buildVariable(result) {
+          return { storeCLinkNote0801Items: result.result.content };
+        }
+      }),
+      new Action({
+        name: '门店C发货(荔枝减半)',
+        remark: '荔枝发货=订货一半，制造订货数量≠发货数量场景',
+        url: '/app/note/processNote',
+        method: 'POST',
+        param: {
+          noteId: '${storeCLinkNote0801Id}',
+          noteItems: '${storeCLinkNote0801Items}',
+          action: 'send',
+          warehouseId: '${supplierWarehouse.warehouseId}',
+          warehouseGroupId: '${supplierWarehouse.warehouseGroupId}'
+        }
+      }, {
+        parseHttpParam(param, variable) {
+          let noteItems = NoteItemUtil.change(param.noteItems);
+          let lycheeId = variable.supplierWarehouseMaterials?.['荔枝']?.materialId;
+          for (let item of noteItems) {
+            if (String(item.materialId) === String(lycheeId)) {
+              item.sendCnt = Number(item.cnt) / 2;
+            } else {
+              item.sendCnt = item.cnt;
+            }
+          }
+          param.noteItems = noteItems;
+          return param;
+        }
+      }),
+      ...(['outstock', 'statement'] as const).map(action => new Action({
+        name: `门店C${action === 'outstock' ? '出库' : '结算'}`,
+        remark: `供应商将门店C的08-01订单${action === 'outstock' ? '出库' : '结算'}`,
         url: '/app/note/batchProcessNote',
         method: 'POST',
         param: {

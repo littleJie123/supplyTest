@@ -13,10 +13,13 @@ export interface WarehouseUserOpt {
 /**
  * 给指定仓库增加可登录用户。
  * 每个用户走 FindLastUserId、getOpenId，再写入 users_warehouse。
+ * 注意：GetOpenId 会覆盖 variable.warehouse，加入仓库时必须用进来时快照的仓库，不能再用 warehouse。
  */
 export class AddWarehouseUsers extends TestCase {
   private warehouseKey: string;
   private users: WarehouseUserOpt[];
+  /** GetOpenId 覆盖 warehouse 前的快照键 */
+  private static readonly SNAPSHOT_KEY = '_addWhUsersWarehouse';
 
   constructor(opt: {
     warehouseKey: string;
@@ -33,7 +36,9 @@ export class AddWarehouseUsers extends TestCase {
   }
 
   protected buildActions(): BaseTest[] {
-    let actions: BaseTest[] = [];
+    let actions: BaseTest[] = [
+      new SnapshotWarehouse(this.warehouseKey, AddWarehouseUsers.SNAPSHOT_KEY)
+    ];
     for (let user of this.users) {
       actions.push(...this.buildUser(user));
     }
@@ -42,6 +47,7 @@ export class AddWarehouseUsers extends TestCase {
 
   private buildUser(user: WarehouseUserOpt): BaseTest[] {
     const key = user.key;
+    const wh = AddWarehouseUsers.SNAPSHOT_KEY;
     let steps: BaseTest[] = [
       new FindLastUserId().setRemark(`取${key}的openid`),
       new GetOpenId().setRemark(`注册${key}`),
@@ -54,8 +60,8 @@ export class AddWarehouseUsers extends TestCase {
           table: 'usersWarehouse',
           array: [{
             usersId: `\${${key}UsersId}`,
-            warehouseId: `\${${this.warehouseKey}.warehouseId}`,
-            warehouseGroupId: `\${${this.warehouseKey}.warehouseGroupId}`,
+            warehouseId: `\${${wh}.warehouseId}`,
+            warehouseGroupId: `\${${wh}.warehouseGroupId}`,
             isAdmin: 0,
             isDel: 0
           }]
@@ -65,18 +71,48 @@ export class AddWarehouseUsers extends TestCase {
     if (user.nickName != null && user.nickName !== '') {
       steps.push(new Action({
         name: `${key}设置昵称`,
-        remark: `nickName=${user.nickName}`,
+        remark: `name/nickName=${user.nickName}（导入匹配 getNickName 优先 name）`,
         url: '/free/update',
         param: {
           table: 'users',
           cdts: [
             { col: 'usersId', val: `\${${key}UsersId}` }
           ],
-          data: { nickName: user.nickName }
+          data: {
+            nickName: user.nickName,
+            name: user.nickName
+          }
         }
       }));
     }
     return steps;
+  }
+}
+
+/** GetOpenId 会改写 warehouse，先把目标仓库拷到独立变量 */
+class SnapshotWarehouse extends BaseTest {
+  private fromKey: string;
+  private toKey: string;
+
+  constructor(fromKey: string, toKey: string) {
+    super();
+    this.fromKey = fromKey;
+    this.toKey = toKey;
+    this.remark = `快照仓库 ${fromKey} → ${toKey}，避免 GetOpenId 覆盖`;
+  }
+
+  getName(): string {
+    return '快照目标仓库';
+  }
+
+  protected async doTest(): Promise<any> {
+  }
+
+  protected buildVariable() {
+    let variable = this.getVariable();
+    return {
+      [this.toKey]: variable[this.fromKey]
+    };
   }
 }
 
