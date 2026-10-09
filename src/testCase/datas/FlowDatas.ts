@@ -167,6 +167,14 @@ export default class extends TestCase {
           origin: 'hand'
         }
       }, {
+        check(result) {
+          let row = (result.result.content ?? []).find((item: any) => item.origin == 'hand')
+          CheckUtil.expectEqual(
+            dayOf(row?.instockTime),
+            '2026-07-02',
+            `手工入库订单 instockTime 应为2026-07-02，实际=${row?.instockTime}`
+          )
+        },
         buildVariable(result) {
           let row = (result.result.content ?? []).find((item: any) => item.origin == 'hand')
           return { handNoteIdForOp: row?.noteId }
@@ -313,7 +321,22 @@ export default class extends TestCase {
         check(result) {
           checkInstockOp(result.result.content ?? [], variable.usersId, null, '批量途径入库')
         }
-      }).setRemark('批量途径：校验 instockUser/instockTime')
+      }).setRemark('批量途径：校验 instockUser/instockTime'),
+      new QueryAction({
+        name: '校验批量途径订单入库时间',
+        url: '/app/note/listNote',
+        query: { noteId: '${batchOpNote.noteId}' }
+      }, {
+        check(result) {
+          let row = (result.result.content ?? [])[0]
+          CheckUtil.expectEqual(row != null, true, '批量途径应能查到订单')
+          CheckUtil.expectEqual(
+            row?.instockTime != null && row.instockTime !== '',
+            true,
+            `批量途径订单 instockTime 不应为空，实际=${row?.instockTime}`
+          )
+        }
+      }).setRemark('批量途径：订单 instockTime 已写入')
     ]
   }
 
@@ -1146,7 +1169,22 @@ class OrderInstockJuly4 extends TestCase {
         check(result) {
           checkInstockOp(result.result.content ?? [], variable.usersId, '2026-07-04', '物料途径入库+改时间')
         }
-      }).setRemark('物料途径：校验 instockUser，且 updateNoteTime 后 instockTime=2026-07-04')
+      }).setRemark('物料途径：校验 instockUser，且 updateNoteTime 后 instockTime=2026-07-04'),
+      new QueryAction({
+        name: '校验物料途径订单入库时间',
+        url: '/app/note/listNote',
+        query: { noteId: '${note.noteId}' }
+      }, {
+        check(result) {
+          let row = (result.result.content ?? [])[0]
+          CheckUtil.expectEqual(row != null, true, '物料途径应能查到订单')
+          CheckUtil.expectEqual(
+            row?.instockTime != null && row.instockTime !== '',
+            true,
+            `物料途径订单 instockTime 不应为空，实际=${row?.instockTime}`
+          )
+        }
+      }).setRemark('物料途径：订单 instockTime 已写入')
     ]
   }
 }

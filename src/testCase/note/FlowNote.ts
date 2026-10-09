@@ -1,4 +1,4 @@
-import { BaseTest, CheckUtil, TestCase } from "testflow";
+import { BaseTest, CheckUtil, DateUtil, TestCase } from "testflow";
 import ListMaterial from "../../action/material/ListMaterial";
 import AddPurcharse from "../../action/note/AddPurcharse";
 import CreateNote3M from "../../action/note/CreateNote3M";
@@ -27,6 +27,11 @@ import Action from "../../action/Action";
  */
 export default class extends TestCase {
   protected buildActions(): BaseTest[] {
+    const variable = this.getVariable();
+    const today = DateUtil.format(new Date());
+    const changedDay = DateUtil.format(DateUtil.beforeDay(new Date(), 3));
+    const tomorrow = DateUtil.format(DateUtil.afterDay(new Date(), 1));
+    const changedTime = changedDay + ' 12:00:00';
     return [
       new PreTest(),
       new AddMaterial('狗肉', {
@@ -349,9 +354,194 @@ export default class extends TestCase {
             { cost: 600 }
           ])
         }
+      }),
+
+      // beginUpdateTime / endUpdateTime：按状态取时间
+      // normal→createTime，instocked→instockTime，statement→statementTime
+      new QueryAction({
+        name: '当天状态时间查出未入库单',
+        url: '/app/note/listNote',
+        query: {
+          status: 'normal',
+          beginUpdateTime: today,
+          endUpdateTime: today
+        }
+      }, {
+        check(result) {
+          let content: any[] = result.result.content ?? [];
+          CheckUtil.expectFindByArray(content, [
+            { cost: 300 },
+            { cost: 500 },
+            { cost: 806 }
+          ]);
+        }
+      }),
+      new QueryAction({
+        name: '三天前状态时间查不出未入库单',
+        url: '/app/note/listNote',
+        query: {
+          status: 'normal',
+          beginUpdateTime: changedDay,
+          endUpdateTime: changedDay
+        }
+      }, {
+        check(result) {
+          let content: any[] = result.result.content ?? [];
+          CheckUtil.expectEqual(content.length, 0, `三天前不应查出未入库单，实际=${JSON.stringify(content)}`);
+        }
+      }),
+      new QueryAction({
+        name: '当天状态时间查出手工单',
+        url: '/app/note/listNote',
+        query: {
+          status: 'instocked',
+          origin: 'hand',
+          beginUpdateTime: today,
+          endUpdateTime: today
+        }
+      }, {
+        buildVariable(result) {
+          let content: any[] = result.result.content ?? [];
+          CheckUtil.expectFindByArray(content, [
+            { cost: 300 },
+            { cost: 600 }
+          ]);
+          let row = content.find(item => item.cost == 300);
+          return {
+            handNoteId: row.noteId
+          };
+        }
+      }),
+      new QueryAction({
+        name: '明天状态时间查不出手工单',
+        url: '/app/note/listNote',
+        query: {
+          status: 'instocked',
+          origin: 'hand',
+          beginUpdateTime: tomorrow,
+          endUpdateTime: tomorrow
+        }
+      }, {
+        check(result) {
+          let content: any[] = result.result.content ?? [];
+          CheckUtil.expectEqual(content.length, 0, `明天不应查出手工单，实际=${JSON.stringify(content)}`);
+        }
+      }),
+      new Action({
+        name: '更改手工单创建时间',
+        url: '/app/note/updateNoteTime',
+        param: {
+          noteId: '${handNoteId}',
+          sysAddTime: changedTime,
+          warehouseId: '${warehouse.warehouseId}',
+          warehouseGroupId: '${warehouse.warehouseGroupId}'
+        }
+      }),
+      new QueryAction({
+        name: '按创建时间查出改期手工单',
+        url: '/app/note/listNote',
+        query: {
+          status: 'instocked',
+          origin: 'hand',
+          begin: changedDay,
+          end: changedDay
+        }
+      }, {
+        check(result) {
+          let content: any[] = result.result.content ?? [];
+          let row = content.find(item => item.noteId == variable.handNoteId);
+          CheckUtil.expectEqual(row != null, true, '按创建时间应查出改期手工单');
+          CheckUtil.expectNotFind(content, { cost: 600 }, '未改期的手工单不应出现在三天前');
+        }
+      }),
+      new QueryAction({
+        name: '改期日状态时间查不出手工单',
+        url: '/app/note/listNote',
+        query: {
+          status: 'instocked',
+          origin: 'hand',
+          beginUpdateTime: changedDay,
+          endUpdateTime: changedDay
+        }
+      }, {
+        check(result) {
+          let content: any[] = result.result.content ?? [];
+          CheckUtil.expectNotFind(content, { noteId: variable.handNoteId }, '已入库单应按入库时间过滤，改创建时间后仍不应出现在三天前');
+        }
+      }),
+      new QueryAction({
+        name: '当天状态时间仍查出改期手工单',
+        url: '/app/note/listNote',
+        query: {
+          status: 'instocked',
+          origin: 'hand',
+          beginUpdateTime: today,
+          endUpdateTime: today
+        }
+      }, {
+        check(result) {
+          let content: any[] = result.result.content ?? [];
+          let row = content.find(item => item.noteId == variable.handNoteId);
+          CheckUtil.expectEqual(row != null, true, '已入库单的状态时间是入库时间，当天仍应查出');
+          CheckUtil.expectFindByArray(content, [
+            { cost: 600 }
+          ]);
+        }
+      }),
+      new Action({
+        name: '结算改期手工单',
+        url: '/app/note/batchProcessNote',
+        param: {
+          warehouseId: '${warehouse.warehouseId}',
+          action: 'statement',
+          noteIds: ['${handNoteId}'],
+          warehouseGroupId: '${warehouse.warehouseGroupId}'
+        }
+      }),
+      new QueryAction({
+        name: '按创建时间查出已结算改期单',
+        url: '/app/note/listNote',
+        query: {
+          status: 'statement',
+          begin: changedDay,
+          end: changedDay
+        }
+      }, {
+        check(result) {
+          let content: any[] = result.result.content ?? [];
+          let row = content.find(item => item.noteId == variable.handNoteId);
+          CheckUtil.expectEqual(row != null, true, '结算后创建时间仍是三天前，按创建时间应查出');
+        }
+      }),
+      new QueryAction({
+        name: '改期日状态时间查不出已结算单',
+        url: '/app/note/listNote',
+        query: {
+          status: 'statement',
+          beginUpdateTime: changedDay,
+          endUpdateTime: changedDay
+        }
+      }, {
+        check(result) {
+          let content: any[] = result.result.content ?? [];
+          CheckUtil.expectNotFind(content, { noteId: variable.handNoteId }, '已结算单应按结算时间过滤，不应出现在三天前');
+        }
+      }),
+      new QueryAction({
+        name: '当天状态时间查出已结算改期单',
+        url: '/app/note/listNote',
+        query: {
+          status: 'statement',
+          beginUpdateTime: today,
+          endUpdateTime: today
+        }
+      }, {
+        check(result) {
+          let content: any[] = result.result.content ?? [];
+          let row = content.find(item => item.noteId == variable.handNoteId);
+          CheckUtil.expectEqual(row != null, true, '已结算单的状态时间是结算时间，当天应查出');
+        }
       })
-
-
 
     ]
   }

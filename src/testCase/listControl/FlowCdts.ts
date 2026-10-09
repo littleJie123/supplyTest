@@ -9,7 +9,7 @@ import Action from "../../action/Action";
 export default class extends TestCase {
   constructor() {
     super({
-      remark: 'ListControl.cdts：listMaterialByCategory 覆盖 = / like / in / or / and / 嵌套，及名字或拼音首字母'
+      remark: 'ListControl.cdts：合法查询，以及字段/操作符注入应被拒绝'
     })
   }
 
@@ -338,6 +338,45 @@ export default class extends TestCase {
           CheckUtil.expectEqual(names[0], '羊肉');
         }
       }),
+
+      rejectCdt('注入字段 1=1 or name', {
+        col: '1=1 or name',
+        value: 1,
+        op: '>'
+      }, 'Cdt字段不合法'),
+      rejectCdt('注入字段 max(sysAddTime)', {
+        col: 'max(sysAddTime)',
+        value: 1,
+        op: '>'
+      }, 'Cdt字段不合法'),
+      rejectCdt("注入字段 if(name='aa',0,1)", {
+        col: "if(name='aa',0,1)",
+        value: 1,
+        op: '='
+      }, 'Cdt字段不合法'),
+      rejectCdt('注入字段反引号', {
+        col: '`name`',
+        value: '羊肉'
+      }, 'Cdt字段不合法'),
+      rejectCdt('注入操作符 like 拼接', {
+        col: 'name',
+        value: 'aaa',
+        op: 'like "%%" ## '
+      }, 'Cdt操作符不合法'),
+      rejectCdt('注入操作符 = 1 or 1=1', {
+        col: 'name',
+        value: '羊肉',
+        op: '= 1 or 1=1'
+      }, 'Cdt操作符不合法'),
+      rejectCdt('注入操作符 not  in', {
+        col: 'materialId',
+        value: [1],
+        op: 'not  in'
+      }, 'Cdt操作符不合法'),
+      rejectProp('注入属性 1=1 or name', '1=1 or name'),
+      rejectProp('注入属性 max(sysAddTime)', 'max(sysAddTime)'),
+      rejectProp('注入属性 if(name=\'aa\',0,1)', "if(name='aa',0,1)"),
+      rejectProp('注入属性反引号', '`name`'),
     ]
   }
 }
@@ -345,6 +384,49 @@ export default class extends TestCase {
 function toNames(result: any): string[] {
   const content = result?.result?.content ?? [];
   return content.map((row: any) => row.name);
+}
+
+/** cdts 中的非法字段或操作符应 500，并返回对应错误信息 */
+function rejectCdt(name: string, item: any, message: string) {
+  return rejectParam(name, {
+    cdts: {
+      array: [item]
+    }
+  }, message);
+}
+
+/**
+ * 请求体上的普通属性会并入查询条件，键名就是字段。
+ * 例如 { "1=1 or name": "aaa" }。
+ */
+function rejectProp(name: string, col: string) {
+  return rejectParam(name, {
+    [col]: 'aaa'
+  }, 'Cdt字段不合法');
+}
+
+/** 请求参数名本身作为字段时，同样走 Cdt 校验 */
+function rejectParam(name: string, param: any, message: string) {
+  return new Action({
+    remark: name,
+    name,
+    url: '/app/material/listMaterialByCategory',
+    method: 'POST',
+    exceptHttpStatus: 500,
+    param: {
+      warehouseId: '${warehouse.warehouseId}',
+      warehouseGroupId: '${warehouse.warehouseGroupId}',
+      ...param
+    }
+  }, {
+    check(result) {
+      CheckUtil.expectEqual(
+        result?.error?.message,
+        message,
+        `${name} 应拒绝，实际=${JSON.stringify(result?.error)}`
+      );
+    }
+  });
 }
 
 /** 对齐客户端 MaterialList：schCol = name / firstPinyin，同一关键字 OR like */

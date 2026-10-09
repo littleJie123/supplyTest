@@ -789,6 +789,27 @@ export default class extends TestCase {
           this.checkUploadedNote(seafoodDay1, { name: '9/1海鲜店', materialCnt: 2, cost: 64, pickCost: 64, outstockCost: 74 });
           this.checkUploadedNote(bread, { name: '9/1面包店', materialCnt: 1, cost: 60, pickCost: 12, outstockCost: 24 });
           this.checkUploadedNote(seafoodDay2, { name: '9/2海鲜店', materialCnt: 2, cost: 320, pickCost: 320, outstockCost: 320 });
+          this.checkNoteOpTime(seafoodDay1, {
+            name: '9/1海鲜店',
+            acceptDay: '2026-08-28',
+            pickDay: '2026-08-29',
+            sendDay: '2026-08-30',
+            outstockDay: '2026-08-31'
+          });
+          this.checkNoteOpTime(bread, {
+            name: '9/1面包店',
+            acceptDay: '2026-08-28',
+            pickDay: '2026-08-29',
+            sendDay: '2026-08-30',
+            outstockDay: '2026-08-31'
+          });
+          this.checkNoteOpTime(seafoodDay2, {
+            name: '9/2海鲜店',
+            acceptDay: '2026-09-01',
+            pickDay: '2026-09-01',
+            sendDay: '2026-09-02',
+            outstockDay: '2026-09-02'
+          });
         },
         buildVariable(result) {
           let content: any[] = result.result?.content ?? [];
@@ -930,6 +951,11 @@ export default class extends TestCase {
           CheckUtil.expectEqual(content.length, 1, '应有1张待发货订单');
           CheckUtil.expectEqual(content[0]?.status, 'picked', '状态应为 picked');
           CheckUtil.expectEqual(content[0]?.cost, 60, '订货金额应为60');
+          this.checkNoteOpTime(content[0], {
+            name: '待发货',
+            acceptDay: '2026-09-02',
+            pickDay: '2026-09-03'
+          });
         },
         buildVariable(result) {
           let content: any[] = result.result?.content ?? [];
@@ -1028,6 +1054,12 @@ export default class extends TestCase {
             true,
             '发货状态不应写结算金额'
           );
+          this.checkNoteOpTime(note, {
+            name: '发货',
+            acceptDay: '2026-09-03',
+            pickDay: '2026-09-04',
+            sendDay: '2026-09-04'
+          });
         },
         buildVariable(result) {
           let content: any[] = result.result?.content ?? [];
@@ -1126,6 +1158,14 @@ export default class extends TestCase {
           CheckUtil.expectEqual(Number(note?.pickCost), 36, '拣货金额应按默认拣货数量 3斤');
           CheckUtil.expectEqual(Number(note?.outstockCost), 36, '出库金额应按默认入库数量 3斤');
           CheckUtil.expectEqual(Number(note?.statementCost), 36, '结算金额应按默认结算数量 3斤');
+          this.checkNoteOpTime(note, {
+            name: '结算',
+            acceptDay: '2026-09-04',
+            pickDay: '2026-09-05',
+            sendDay: '2026-09-05',
+            outstockDay: '2026-09-05',
+            statementDay: '2026-09-05'
+          });
         },
         buildVariable(result) {
           let content: any[] = result.result?.content ?? [];
@@ -1214,6 +1254,13 @@ export default class extends TestCase {
           CheckUtil.expectEqual(note != null, true, '应有9/10面包店重复物料订单');
           CheckUtil.expectEqual(note?.materialCnt, 1, '合并后应为1条物料');
           CheckUtil.expectEqual(Number(note?.cost), 78, '合并后订货金额应为78');
+          this.checkNoteOpTime(note, {
+            name: '重复物料',
+            acceptDay: '2026-09-07',
+            pickDay: '2026-09-08',
+            sendDay: '2026-09-09',
+            outstockDay: '2026-09-10'
+          });
         },
         buildVariable(result) {
           let content: any[] = result.result?.content ?? [];
@@ -1277,6 +1324,43 @@ export default class extends TestCase {
         }
       }),
     ];
+  }
+
+  /**
+   * 供应商上传订单的操作时间。传入的日期必须相等；没传的列应为空。
+   */
+  private checkNoteOpTime(note: any, opt: {
+    name: string;
+    acceptDay?: string;
+    pickDay?: string;
+    sendDay?: string;
+    outstockDay?: string;
+    statementDay?: string;
+    instockDay?: string;
+  }) {
+    let cols: [string, string][] = [
+      ['acceptTime', opt.acceptDay],
+      ['pickTime', opt.pickDay],
+      ['sendTime', opt.sendDay],
+      ['outstockTime', opt.outstockDay],
+      ['statementTime', opt.statementDay],
+      ['instockTime', opt.instockDay]
+    ];
+    for (let [col, day] of cols) {
+      if (day == null || day === '') {
+        CheckUtil.expectEqual(
+          note?.[col] == null || note?.[col] === '',
+          true,
+          `${opt.name} 订单 ${col} 应为空，实际=${note?.[col]}`
+        );
+      } else {
+        CheckUtil.expectEqual(
+          this.dayOf(note?.[col]),
+          day,
+          `${opt.name} 订单 ${col} 应为 ${day}，实际=${note?.[col]}`
+        );
+      }
+    }
   }
 
   private dayOf(value: any): string {

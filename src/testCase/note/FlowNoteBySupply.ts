@@ -281,6 +281,15 @@ export default class extends TestCase {
           let note: any[] = result.note;
           note = note.filter(row => row.statementCost > 0);
           CheckUtil.expectEqual(note.length > 0, true, '供应商订单结算金额应大于0');
+          for (let row of note) {
+            for (let col of ['acceptTime', 'pickTime', 'sendTime', 'outstockTime', 'statementTime']) {
+              CheckUtil.expectEqual(
+                row[col] != null && row[col] !== '',
+                true,
+                `结算订单 noteId=${row.noteId} ${col} 不应为空，实际=${row[col]}`
+              );
+            }
+          }
           let noteItems: any[] = result.noteItem;
           for (let row of noteItems) {
             CheckUtil.expectEqual(Number(row.statementCnt), Number(row.outstockCnt), '供应商明细结算数量应等于出库数量');

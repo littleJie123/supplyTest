@@ -15,6 +15,9 @@
 11. **顶层 `or`**：`name=羊肉 or name=白菜` → 羊、白菜。
 12. **顶层 `and`**：`name like '肉' and materialId=羊肉` → 只返回羊肉。
 13. **嵌套**：`like '肉' and (name=羊肉 or name=白菜)` → 只命中羊肉（白菜不含「肉」）。
+14. **注入字段**：`cdts` 的 `col` 为 `1=1 or name`、`max(sysAddTime)`、`if(name='aa',0,1)`、`` `name` `` → HTTP 500，`error.message=Cdt字段不合法`。
+15. **注入操作符**：`op` 为 `like "%%" ## `、`= 1 or 1=1`、`not  in` → HTTP 500，`error.message=Cdt操作符不合法`。
+16. **注入属性**（不走 `cdts`）：请求体直接带 `{"1=1 or name":"aaa"}`、`{"max(sysAddTime)":"aaa"}`、`{"if(name='aa',0,1)":"aaa"}`、`` {"`name`":"aaa"} ``。这些键会并入查询条件 → HTTP 500，`error.message=Cdt字段不合法`。
 
 # 注意点
 - `op=like` 时：value 字符串不含 `%` 则左右补 `%`；已含任意 `%` 则不改。
@@ -22,3 +25,5 @@
 - 顶层 `cdts.op` 默认 `or`；嵌套项 `op` 为 `or`/`and` 时用内部 `array`。
 - 物料大厅搜索（MaterialList）为 `name` 与 `firstPinyin` 的 OR like，本用例用同一关键字构造 `cdts` 模拟。
 - 结构约定见 `doc/ListControl查询条件.md`。
+- 注入用例期望接口失败。`exceptHttpStatus=500`。错误文案含中文，服务端会原样返回 `Cdt字段不合法` 或 `Cdt操作符不合法`。
+- 除 `cdts` 外，请求体上的其他属性也会变成查询字段。属性注入不传 `cdts`，值为 `"aaa"`。

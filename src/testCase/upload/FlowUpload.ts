@@ -187,6 +187,22 @@ export default class extends TestCase {
     }
   }
 
+  /** 餐厅上传订单：instockTime 为订单日期，其余操作时间不写 */
+  private checkNoteInstockTime(note: any, name: string, day: string) {
+    CheckUtil.expectEqual(
+      String(note?.instockTime ?? '').substring(0, 10),
+      day,
+      `${name} 订单 instockTime 应为 ${day}，实际=${note?.instockTime}`
+    );
+    for (let col of ['acceptTime', 'pickTime', 'sendTime', 'outstockTime', 'statementTime']) {
+      CheckUtil.expectEqual(
+        note?.[col] == null || note?.[col] === '',
+        true,
+        `${name} 订单 ${col} 应为空，实际=${note?.[col]}`
+      );
+    }
+  }
+
   private checkNoteItemRow(row: any, opt: {
     name: string;
     price: number;
@@ -457,6 +473,8 @@ export default class extends TestCase {
           CheckUtil.expectEqual(noteCola != null, true, '应有汽水+可乐订单金额650');
           CheckUtil.expectEqual(noteBaijiu?.materialCnt, 2, '啤酒+白酒应为2条物料');
           CheckUtil.expectEqual(noteCola?.materialCnt, 2, '汽水+可乐应为2条物料');
+          this.checkNoteInstockTime(noteBaijiu, '啤酒+白酒', '2026-08-01');
+          this.checkNoteInstockTime(noteCola, '汽水+可乐', '2026-08-02');
         },
         buildVariable(result) {
           let content: any[] = result.result?.content ?? [];
@@ -561,6 +579,7 @@ export default class extends TestCase {
           let note = content.find(row => row.cost === 12);
           CheckUtil.expectEqual(note != null, true, '应有按编码匹配的订单金额12');
           CheckUtil.expectEqual(note?.materialCnt, 1, '编码匹配订单应为1条物料');
+          this.checkNoteInstockTime(note, '编码匹配', '2026-09-01');
         },
         buildVariable(result) {
           let content: any[] = result.result?.content ?? [];
@@ -993,6 +1012,7 @@ export default class extends TestCase {
           let note = content.find(row => Number(row.cost) === 78);
           CheckUtil.expectEqual(note != null, true, '应有重复物料合并订单金额78');
           CheckUtil.expectEqual(note?.materialCnt, 1, '合并后应为1条物料');
+          this.checkNoteInstockTime(note, '重复物料', '2026-09-10');
         },
         buildVariable(result) {
           let content: any[] = result.result?.content ?? [];

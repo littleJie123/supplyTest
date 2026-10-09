@@ -651,6 +651,7 @@ export default class extends TestCase {
         actions.push(...this.buildSupplierOutByItem(store));
       }
       actions.push(this.buildCheckSupplierOp(store));
+      actions.push(this.buildCheckSupplierNoteTime(store));
     }
     return actions;
   }
@@ -795,6 +796,35 @@ export default class extends TestCase {
         }
       }
     }).setRemark(`${store.title}校验拣货/发货/出库操作人与时间`);
+  }
+
+  /** 校验订单上的接单/拣货/发货/出库时间 */
+  private buildCheckSupplierNoteTime(store: StoreDef): BaseTest {
+    return new QueryAction({
+      name: `${store.title}校验订单操作时间`,
+      url: '/app/note/listNote',
+      query: {
+        noteId: `\${${store.key}LinkNoteId}`
+      }
+    }, {
+      warehouseType: 'supplierWarehouse',
+      check(result) {
+        const row = (result.result.content ?? [])[0];
+        CheckUtil.expectEqual(row != null, true, `${store.title}应能查到供应商订单`);
+        for (const col of ['acceptTime', 'pickTime', 'sendTime', 'outstockTime']) {
+          CheckUtil.expectEqual(
+            row?.[col] != null && row[col] !== '',
+            true,
+            `${store.title}订单 ${col} 不应为空，实际=${row?.[col]}`
+          );
+        }
+        CheckUtil.expectEqual(
+          row?.statementTime == null || row.statementTime === '',
+          true,
+          `${store.title}订单 statementTime 应为空，实际=${row?.statementTime}`
+        );
+      }
+    }).setRemark(`${store.title}订单 accept/pick/send/outstock 时间已写入`);
   }
 
   /**
