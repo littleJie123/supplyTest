@@ -10,7 +10,7 @@
 
 ## 系统工作台
 
-1. 不传 `type` 新增应失败。门店工作台使用供应商权限应失败。新增订单，分组「订货」，`type=store`，`routersKey` 为同类型测试权限。没有同组，`sort=0`，`groupSort` 为当前最大 `groupSort+1`（表里还没有则为 0）。同名可以再新增，查到两条后再删掉第二条。
+1. 不传 `type` 新增应失败。门店工作台使用供应商权限应失败。门店工作台使用 `type=all` 的权限可以通过，用完后删除。新增订单，分组「订货」，`type=store`，`routersKey` 为同类型测试权限。没有同组，`sort=0`，`groupSort` 为当前最大 `groupSort+1`（表里还没有则为 0）。同名可以再新增，查到两条后再删掉第二条。
 2. 再新增库存，同一分组，`type=store`。`groupSort` 沿用订货分组，`sort` 为同组最大 `sort+1`（即 1）。
 3. 新增盘点，分组「盘点」，`type=all`。没有同组，`sort=0`，`groupSort` 再加 1。库存可以改成订单名称，再改回库存。
 4. 先把订单 `groupSort` 改成 4、库存改成 8，再 `setSort`。组内顺序为库存、订单；全组 `groupSort` 变成 4（`workbenchId` 最小且 `groupSort` 不为空的那条）。

@@ -50,6 +50,30 @@ export default class extends TestCase {
       this.readMaxGroupSort('读取当前最大分组顺序', 'maxGroupSort'),
       this.addFailType(),
       this.addFailRoutersType(),
+      this.addWorkbench('门店可以使用全部类型权限', {
+        name: '_test_全部权限',
+        imageKey: 'img-all',
+        url: '/all',
+        groupName: '_test_临时',
+        routersKey: KEY_CHECK,
+        type: TYPE_STORE
+      }, 'allKeyWorkbenchId'),
+      this.listByName('全部类型权限保存成功', '_test_全部权限', {
+        imageKey: 'img-all',
+        url: '/all',
+        groupName: '_test_临时',
+        groupSort: (v) => v.maxGroupSort + 1,
+        sort: 0,
+        routersKey: KEY_CHECK,
+        type: TYPE_STORE
+      }),
+      new HttpAction({
+        name: '删除全部类型权限工作台',
+        url: '/admin/workbench/delWorkbench',
+        param: {
+          workbenchId: '${allKeyWorkbenchId}'
+        }
+      }),
       this.addWorkbench('新增订单工作台', {
         name: ORDER_NAME,
         imageKey: 'img-order',
@@ -436,7 +460,7 @@ export default class extends TestCase {
   private prepareRouters() {
     return new HttpAction({
       name: '准备测试权限',
-      remark: '工作台 routersKey 必须对应未删除权限，且 type 相同',
+      remark: '权限 type 为 all，或与工作台 type 相同，才允许保存',
       url: '/free/add',
       param: {
         table: 'routers',
