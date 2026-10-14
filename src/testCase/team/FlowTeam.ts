@@ -2,13 +2,21 @@ import { BaseTest, CheckUtil, TestCase } from "testflow";
 import PreTest from "../PreTest";
 import Action from "../../action/Action";
 
+/** 跨页造数条数，大于列表默认页大小 */
+const SCH_TOTAL = 1000
+/** _schParam 里的页大小，全选应忽略分页 */
+const SCH_PAGE_SIZE = 20
+/** 反选下标：首页、翻页边界、中段、末页 */
+const SCH_EXCLUDE_INDEXES = [0, 19, 20, 500, 999]
+const SCH_TITLE = '跨页选择'
+
 /**
- * 订单分组 + listNote / listNoteInfo（按状态、物料、分组查询）。
+ * 订单分组 + listNote / listNoteInfo（按状态、物料、分组查询）+ 跨页全选入组。
  * 见同目录 FlowTeam.md。
  */
 export default class extends TestCase {
   constructor() {
-    super({ remark: '订单分组：建物料与订单、分组增删改查、按状态/物料/分组查询' })
+    super({ remark: '订单分组：建物料与订单、分组增删改查、按状态/物料/分组查询、跨页全选入组' })
   }
 
   getName(): string {
@@ -29,7 +37,8 @@ export default class extends TestCase {
       new CreateOrder3(),
       new TeamCrud(),
       new BindNotesToTeam(),
-      ...this.buildQueryCases()
+      ...this.buildQueryCases(),
+      new CrossPageAddNotes()
     ]
   }
 
@@ -544,6 +553,174 @@ class BindNotesToTeam extends TestCase {
           teamId: '${team2Id}',
           warehouseId: '${warehouse.warehouseId}',
           noteIds: ['${note1Id}']
+        }
+      })
+    ]
+  }
+}
+
+/**
+ * 跨页全选入组。
+ * /free/add 造 1000 张订单，每张一条 noteItem（materialId=1）。
+ * addNotes 走 _schParam（带分页和 _notInIds），新分组应只含未被反选的订单。
+ */
+class CrossPageAddNotes extends TestCase {
+  constructor() {
+    super({
+      remark: `造${SCH_TOTAL}张订单跨页全选入组，_notInIds 反选${SCH_EXCLUDE_INDEXES.length}张`
+    })
+  }
+
+  getName(): string {
+    return '跨页选择加入分组'
+  }
+
+  protected buildActions(): BaseTest[] {
+    let variable = this.getVariable()
+    return [
+      new Action({
+        name: `插入${SCH_TOTAL}个订单`,
+        remark: `title=${SCH_TITLE}，供跨页全选`,
+        url: '/free/add',
+        method: 'POST',
+        param: {
+          table: 'note',
+          array: []
+        }
+      }, {
+        parseHttpParam(param, variable) {
+          let warehouseId = variable.warehouse.warehouseId
+          let warehouseGroupId = variable.warehouse.warehouseGroupId
+          let supplierId = variable.supplierMap['供应商1']
+          param.array = Array.from({ length: SCH_TOTAL }, () => ({
+            warehouseId,
+            warehouseGroupId,
+            supplierId,
+            isDel: 0,
+            status: 'normal',
+            type: 'purcharse',
+            origin: 'normal',
+            title: SCH_TITLE,
+            materialCnt: 1,
+            linkNoteId: 0,
+            parenNoteId: 0
+          }))
+          return param
+        },
+        buildVariable(result) {
+          let rows: any[] = result.result ?? []
+          let ids = rows.map(row => row.noteId)
+          let exclude = SCH_EXCLUDE_INDEXES.map(index => ids[index])
+          let expect = ids.filter(id => exclude.indexOf(id) < 0)
+          return {
+            schNoteIds: ids,
+            schExcludeIds: exclude,
+            schExpectIds: expect
+          }
+        }
+      }),
+      new Action({
+        name: `插入${SCH_TOTAL}条订单明细`,
+        remark: 'materialId 均为 1，供 listNote 按物料跨页查询',
+        url: '/free/add',
+        method: 'POST',
+        param: {
+          table: 'noteItem',
+          array: []
+        }
+      }, {
+        parseHttpParam(param, variable) {
+          let warehouseId = variable.warehouse.warehouseId
+          let warehouseGroupId = variable.warehouse.warehouseGroupId
+          let supplierId = variable.supplierMap['供应商1']
+          let ids: any[] = variable.schNoteIds
+          param.array = ids.map(noteId => ({
+            noteId,
+            materialId: 1,
+            warehouseId,
+            warehouseGroupId,
+            supplierId,
+            isDel: 0,
+            cnt: 1,
+            price: 1,
+            buyUnitFee: 1,
+            stockBuyUnitFee: 1,
+            stockUnitsId: 0
+          }))
+          return param
+        }
+      }),
+      new Action({
+        name: '创建跨页组',
+        url: '/app/team/addTeam',
+        param: {
+          warehouseId: '${warehouse.warehouseId}',
+          name: '跨页组'
+        }
+      }, {
+        buildVariable(result) {
+          return {
+            schTeamId: result.result.teamId
+          }
+        }
+      }),
+      new Action({
+        name: '跨页全选加入跨页组',
+        remark: `_schParam 带 pageSize=${SCH_PAGE_SIZE}，_notInIds 反选${SCH_EXCLUDE_INDEXES.length}张，应忽略分页选中其余订单`,
+        highlight: true,
+        url: '/app/team/addNotes',
+        param: {
+          teamId: '${schTeamId}',
+          warehouseId: '${warehouse.warehouseId}',
+          _schParam: {
+            warehouseId: '${warehouse.warehouseId}',
+            warehouseGroupId: '${warehouse.warehouseGroupId}',
+            materialId: 1,
+            title: SCH_TITLE,
+            pageSize: SCH_PAGE_SIZE,
+            pageNo: 1,
+            _notInIds: '${schExcludeIds}'
+          }
+        }
+      }),
+      new Action({
+        name: '核对跨页组订单',
+        remark: `新分组应有${SCH_TOTAL - SCH_EXCLUDE_INDEXES.length}张，反选的不在组里`,
+        url: '/free/query',
+        method: 'POST',
+        param: {
+          array: [{
+            table: 'noteTeam',
+            cols: ['noteId'],
+            query: {
+              teamId: '${schTeamId}',
+              isDel: 0
+            }
+          }]
+        }
+      }, {
+        check(result) {
+          let rows: any[] = result.result?.noteTeam ?? []
+          let ids = rows.map(row => Number(row.noteId)).sort((a, b) => a - b)
+          let expectIds = (variable.schExpectIds ?? []).map((id: any) => Number(id)).sort((a, b) => a - b)
+          let excludeIds = (variable.schExcludeIds ?? []).map((id: any) => Number(id))
+          CheckUtil.expectEqual(
+            ids.length,
+            SCH_TOTAL - SCH_EXCLUDE_INDEXES.length,
+            `跨页组应有${SCH_TOTAL - SCH_EXCLUDE_INDEXES.length}个订单，实际=${ids.length}`
+          )
+          for (let id of excludeIds) {
+            CheckUtil.expectEqual(
+              ids.indexOf(id) < 0,
+              true,
+              `反选订单 ${id} 不应在跨页组中`
+            )
+          }
+          CheckUtil.expectEqual(
+            JSON.stringify(ids),
+            JSON.stringify(expectIds),
+            '跨页组中的订单应等于全选结果去掉反选'
+          )
         }
       })
     ]

@@ -331,6 +331,7 @@ class InstockByOrder extends TestCase {
         param: {
           noteId: '${note.noteId}',
           sysAddTime: `${opt.day} 00:00:00`,
+          lastUpdateTime: `${opt.day} 00:00:00`,
           warehouseId: '${warehouse.warehouseId}',
           warehouseGroupId: '${warehouse.warehouseGroupId}'
         }
@@ -560,6 +561,7 @@ class BackNoteC extends TestCase {
         param: {
           noteId: '${noteCId}',
           sysAddTime: '2026-06-10 00:00:00',
+          lastUpdateTime: '2026-06-10 00:00:00',
           warehouseId: '${warehouse.warehouseId}',
           warehouseGroupId: '${warehouse.warehouseGroupId}'
         }

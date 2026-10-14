@@ -319,6 +319,7 @@ class OrderInstockJuly2 extends TestCase {
         param: {
           noteId: '${note.noteId}',
           sysAddTime: '2026-07-02 00:00:00',
+          lastUpdateTime: '2026-07-02 00:00:00',
           warehouseId: '${warehouse.warehouseId}',
           warehouseGroupId: '${warehouse.warehouseGroupId}'
         }
@@ -424,6 +425,7 @@ class BackJuly4 extends TestCase {
         param: {
           noteId: '${backNoteId}',
           sysAddTime: '2026-07-04 00:00:00',
+          lastUpdateTime: '2026-07-04 00:00:00',
           warehouseId: '${warehouse.warehouseId}',
           warehouseGroupId: '${warehouse.warehouseGroupId}'
         }

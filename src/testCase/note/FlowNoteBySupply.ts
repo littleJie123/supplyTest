@@ -15,6 +15,7 @@ import Fraction from "../../util/Fraction";
 import NoteItemUtil from "../../util/NoteItemUtil";
 import ProcessNote from "../../action/note/ProcessNote";
 import CheckerMaterialLink from "../../action/CheckerMaterialLink";
+import StockUtil from "../../util/StockUtil";
 interface CheckOpt {
   checkItems?(item: any);
   checkSupplierItems?(item: any);
@@ -668,9 +669,149 @@ export default class extends TestCase {
 
       new ListMaterial(),
       new CreateNote3M(),
-      new CheckerMaterialLink()
+      new CheckerMaterialLink(),
+
+      ...this.buildUpdateNoteItem()
 
     ]
+  }
+
+  /**
+   * 简略走一遍修改订单物料：供应商发单后是待拣货，改的是订货数量。
+   */
+  private buildUpdateNoteItem(): BaseTest[] {
+    return [
+      new QueryAction({
+        name: '读取本仓供应商',
+        url: '/app/supplier/listSupplier'
+      }, {
+        warehouseType: 'supplierWarehouse',
+        buildVariable(result) {
+          let row = result.result.content[0];
+          return {
+            editSupplierId: row.supplierId
+          };
+        }
+      }),
+      new Action({
+        name: '供应商下单香肉',
+        url: '/app/note/createNote',
+        method: 'POST',
+        param: {
+          items: [{
+            materialId: '${materials.香肉.materialId}',
+            supplierId: '${editSupplierId}',
+            cnt: 2,
+            buyUnitFee: 1,
+            stockUnitsId: 0,
+            price: 10,
+            stockBuyUnitFee: 1
+          }],
+          warehouseId: '${supplierWarehouse.warehouseId}',
+          warehouseGroupId: '${supplierWarehouse.warehouseGroupId}'
+        }
+      }, {
+        warehouseType: 'supplierWarehouse',
+        buildVariable(result) {
+          let content = result.result;
+          let row = Array.isArray(content) ? content[0] : content;
+          return {
+            editNoteId: row.noteId
+          };
+        }
+      }),
+      new Action({
+        name: '发送香肉订单',
+        url: '/app/note/sendNote',
+        method: 'POST',
+        param: {
+          noteIds: [],
+          status: 'normal',
+          warehouseId: '${supplierWarehouse.warehouseId}',
+          warehouseGroupId: '${supplierWarehouse.warehouseGroupId}'
+        }
+      }, {
+        warehouseType: 'supplierWarehouse',
+        parseHttpParam(param, variable) {
+          param.noteIds = [variable.editNoteId];
+          return param;
+        }
+      }),
+      new QueryAction({
+        name: '读取香肉物料',
+        url: '/app/noteItem/listNoteItem',
+        query: {
+          noteId: '${editNoteId}'
+        }
+      }, {
+        warehouseType: 'supplierWarehouse',
+        buildVariable(result) {
+          return {
+            noteItems: result.result.content
+          };
+        }
+      }),
+      new Action({
+        name: '修改订货数量',
+        url: '/app/noteItem/updateNoteItem',
+        method: 'POST',
+        param: {
+          noteId: '${editNoteId}',
+          warehouseId: '${supplierWarehouse.warehouseId}',
+          warehouseGroupId: '${supplierWarehouse.warehouseGroupId}',
+          datas: {}
+        }
+      }, {
+        warehouseType: 'supplierWarehouse',
+        parseHttpParam(param, variable) {
+          let item = (variable.noteItems as any[]).find(row => row.name == '香肉');
+          param.datas = {
+            update: [{
+              noteItemId: item.noteItemId,
+              cnt: { cnt: 3, buyUnitFee: 1 }
+            }]
+          };
+          return param;
+        }
+      }),
+      new QueryAction({
+        name: '校验供应商订货修改',
+        url: '/app/note/listNote',
+        query: {
+          noteId: '${editNoteId}'
+        }
+      }, {
+        warehouseType: 'supplierWarehouse',
+        check(result) {
+          let row = result.result.content[0];
+          CheckUtil.expectEqual(row.status, 'accept', '发单后应为待拣货');
+          CheckUtil.expectEqual(row.materialCnt, 1, '物料款数');
+          CheckUtil.expectEqual(Number(row.cost), 30, '订货金额');
+        }
+      }),
+      new QueryAction({
+        name: '校验供应商订货数量',
+        url: '/app/noteItem/listNoteItem',
+        query: {
+          noteId: '${editNoteId}'
+        }
+      }, {
+        warehouseType: 'supplierWarehouse',
+        check(result) {
+          let row = result.result.content.find(item => item.name == '香肉');
+          CheckUtil.expectEqual(
+            StockUtil.isEq(row.purcharse, { cnt: 3, buyUnitFee: 1 }),
+            true,
+            '订货数量应为3'
+          );
+          CheckUtil.expectEqual(
+            StockUtil.isEq(row.pick, { cnt: 0, buyUnitFee: 1 }),
+            true,
+            '拣货数量应为0'
+          );
+        }
+      })
+    ];
   }
 
   private buildInstockActions(): BaseTest[] {

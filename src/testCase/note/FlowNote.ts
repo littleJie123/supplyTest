@@ -21,6 +21,7 @@ import QueryAction from "../../action/QueryAction";
 import ProcessNote from "../../action/note/ProcessNote";
 import SplitNote from "../../action/note/SplitNote";
 import Action from "../../action/Action";
+import StockUtil from "../../util/StockUtil";
 
 /**
  * 订单流程
@@ -541,10 +542,200 @@ export default class extends TestCase {
           let row = content.find(item => item.noteId == variable.handNoteId);
           CheckUtil.expectEqual(row != null, true, '已结算单的状态时间是结算时间，当天应查出');
         }
-      })
+      }),
+
+      ...this.buildUpdateNoteItem()
 
     ]
   }
+
+  /**
+   * 简略走一遍修改订单物料：待入库改订货数量，入库后改入库数量。
+   */
+  private buildUpdateNoteItem(): BaseTest[] {
+    return [
+      new Action({
+        name: '下单狗肉',
+        url: '/app/note/createNote',
+        method: 'POST',
+        param: {
+          items: [{
+            materialId: '${materialMap.狗肉.materialId}',
+            supplierId: '${supplierMap.供应商1}',
+            cnt: 2,
+            buyUnitFee: 1,
+            stockUnitsId: 0,
+            price: 10,
+            stockBuyUnitFee: 1
+          }],
+          warehouseId: '${warehouse.warehouseId}',
+          warehouseGroupId: '${warehouse.warehouseGroupId}'
+        }
+      }, {
+        buildVariable(result) {
+          let content = result.result;
+          let row = Array.isArray(content) ? content[0] : content;
+          return {
+            editNoteId: row.noteId
+          };
+        }
+      }),
+      new Action({
+        name: '发送狗肉订单',
+        url: '/app/note/sendNote',
+        method: 'POST',
+        param: {
+          noteIds: [],
+          status: 'normal',
+          warehouseId: '${warehouse.warehouseId}',
+          warehouseGroupId: '${warehouse.warehouseGroupId}'
+        }
+      }, {
+        parseHttpParam(param, variable) {
+          param.noteIds = [variable.editNoteId];
+          return param;
+        }
+      }),
+      new QueryAction({
+        name: '读取狗肉物料',
+        url: '/app/noteItem/listNoteItem',
+        query: {
+          noteId: '${editNoteId}'
+        }
+      }, {
+        buildVariable(result) {
+          return {
+            noteItems: result.result.content
+          };
+        }
+      }),
+      new Action({
+        name: '修改订货数量',
+        url: '/app/noteItem/updateNoteItem',
+        method: 'POST',
+        param: {
+          noteId: '${editNoteId}',
+          warehouseId: '${warehouse.warehouseId}',
+          warehouseGroupId: '${warehouse.warehouseGroupId}',
+          datas: {}
+        }
+      }, {
+        parseHttpParam(param, variable) {
+          let item = (variable.noteItems as any[]).find(row => row.name == '狗肉');
+          param.datas = {
+            update: [{
+              noteItemId: item.noteItemId,
+              cnt: { cnt: 3, buyUnitFee: 1 }
+            }]
+          };
+          return param;
+        }
+      }),
+      new QueryAction({
+        name: '校验订货修改',
+        url: '/app/note/listNote',
+        query: {
+          noteId: '${editNoteId}'
+        }
+      }, {
+        check(result) {
+          let row = result.result.content[0];
+          CheckUtil.expectEqual(row.materialCnt, 1, '物料款数');
+          CheckUtil.expectEqual(Number(row.cost), 30, '订货金额');
+        }
+      }),
+      new QueryAction({
+        name: '校验订货数量',
+        url: '/app/noteItem/listNoteItem',
+        query: {
+          noteId: '${editNoteId}'
+        }
+      }, {
+        check(result) {
+          let row = result.result.content.find(item => item.name == '狗肉');
+          CheckUtil.expectEqual(
+            StockUtil.isEq(row.purcharse, { cnt: 3, buyUnitFee: 1 }),
+            true,
+            '订货数量应为3'
+          );
+        }
+      }),
+      new Action({
+        name: '入库狗肉订单',
+        url: '/app/note/batchProcessNote',
+        method: 'POST',
+        param: {
+          action: 'instock',
+          type: 'purcharse',
+          noteIds: [],
+          warehouseId: '${warehouse.warehouseId}',
+          warehouseGroupId: '${warehouse.warehouseGroupId}'
+        }
+      }, {
+        parseHttpParam(param, variable) {
+          param.noteIds = [variable.editNoteId];
+          return param;
+        }
+      }),
+      new Action({
+        name: '修改入库数量',
+        url: '/app/noteItem/updateNoteItem',
+        method: 'POST',
+        param: {
+          noteId: '${editNoteId}',
+          warehouseId: '${warehouse.warehouseId}',
+          warehouseGroupId: '${warehouse.warehouseGroupId}',
+          datas: {}
+        }
+      }, {
+        parseHttpParam(param, variable) {
+          let item = (variable.noteItems as any[]).find(row => row.name == '狗肉');
+          param.datas = {
+            update: [{
+              noteItemId: item.noteItemId,
+              cnt: { cnt: 4, buyUnitFee: 1 }
+            }]
+          };
+          return param;
+        }
+      }),
+      new QueryAction({
+        name: '校验入库修改',
+        url: '/app/note/listNote',
+        query: {
+          noteId: '${editNoteId}'
+        }
+      }, {
+        check(result) {
+          let row = result.result.content[0];
+          CheckUtil.expectEqual(Number(row.instockCost), 40, '入库金额');
+          CheckUtil.expectEqual(Number(row.cost), 30, '订货金额不变');
+        }
+      }),
+      new QueryAction({
+        name: '校验入库数量',
+        url: '/app/noteItem/listNoteItem',
+        query: {
+          noteId: '${editNoteId}'
+        }
+      }, {
+        check(result) {
+          let row = result.result.content.find(item => item.name == '狗肉');
+          CheckUtil.expectEqual(
+            StockUtil.isEq(row.instock, { cnt: 4, buyUnitFee: 1 }),
+            true,
+            '入库数量应为4'
+          );
+          CheckUtil.expectEqual(
+            StockUtil.isEq(row.purcharse, { cnt: 3, buyUnitFee: 1 }),
+            true,
+            '订货数量仍为3'
+          );
+        }
+      })
+    ];
+  }
+
   getName(): string {
     return '订单流程'
   }

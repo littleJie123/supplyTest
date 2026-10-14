@@ -239,6 +239,7 @@ class OrderInstockJune2 extends TestCase {
         param: {
           noteId: '${note.noteId}',
           sysAddTime: '2026-06-02 00:00:00',
+          lastUpdateTime: '2026-06-02 00:00:00',
           warehouseId: '${warehouse.warehouseId}',
           warehouseGroupId: '${warehouse.warehouseGroupId}'
         }

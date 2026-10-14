@@ -28,5 +28,16 @@
 - 根据状态“入库”查询订单
 - 根据物料“梨”查询订单
 - 根据订单组“组2”查询订单
-- 根据 “入库” “梨”，“组2”一起查询订单。 
+- 根据 “入库” “梨”，“组2”一起查询订单。
+
+## 跨页选择加入分组
+`/app/team/addNotes` 已加 `@SchIds`（查询接口 `ListNote`，id 字段 `noteId`，写入 `noteIds`）。
+
+1. `/free/add` 插入 **1000** 张订单（`title=跨页选择`），再插入 1000 条 `noteItem`，`materialId` 均为 **1**。
+2. 新建分组「跨页组」。
+3. 调用 `/app/team/addNotes`，不传 `noteIds`，传 `_schParam`：
+   - `warehouseId`、`warehouseGroupId`、`materialId=1`、`title=跨页选择`
+   - `pageSize=20`、`pageNo=1`（应忽略分页，跨页全选）
+   - `_notInIds`：反选 5 张（下标 0、19、20、500、999，覆盖首页、翻页边界、中段、末页）
+4. `/free/query` 查 `noteTeam`：跨页组应有 **995** 张订单，反选的 5 张不在组里，其余与插入的订单一致。 
 
