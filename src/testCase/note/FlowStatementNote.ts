@@ -94,11 +94,11 @@ export default class extends TestCase {
         check(array) {
           CheckUtil.expectEqual(array.length, 1, '应有1条明细')
           CheckUtil.expectEqual(array[0].instockCnt, 10)
-          CheckUtil.expectEqual(array[0].instockCost, 20)
           CheckUtil.expectEqual(array[0].statementCnt, 10, 'statementCnt 应等于 instockCnt')
-          CheckUtil.expectEqual(array[0].statementCost, 20, 'statementCost 应等于 instockCost')
+          CheckUtil.expectNotNull(array[0].statementTime, '明细结算时间')
+          CheckUtil.expectNotNull(array[0].statementUser, '明细结算人')
         }
-      }]).setRemark('校验结算后订单状态/金额，明细 statement 抄入库值'),
+      }]).setRemark('校验结算后订单状态/金额，明细 statementCnt 抄入库数量'),
 
       listNoteHis({
         name: '查询结算历史',
@@ -151,7 +151,8 @@ export default class extends TestCase {
         check(array) {
           CheckUtil.expectEqual(array.length, 1, '应有1条明细')
           CheckUtil.expectEqual(array[0].statementCnt == null, true, 'statementCnt 应清空')
-          CheckUtil.expectEqual(array[0].statementCost == null, true, 'statementCost 应清空')
+          CheckUtil.expectEqual(array[0].statementTime == null, true, 'statementTime 应清空')
+          CheckUtil.expectEqual(array[0].statementUser == null, true, 'statementUser 应清空')
         }
       }]).setRemark('校验取消结算后订单状态/金额，明细 statement 清空'),
 

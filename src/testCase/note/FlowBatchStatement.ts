@@ -20,11 +20,13 @@ const DAY = '2026-10-01';
  * 检查、批量结算各高亮两次：一次 noteIds，一次 _schParam（不带分页，_notInIds 反选一张）。
  * 餐厅 3 张待入库反选后只结算 2 张并加库存；供应商待拣货缺中间状态，发货扣库存。
  * 已经入库或出库的再结算，不再写库存。
+ * 结算后批量取消：一次 noteIds，一次 _schParam（不带分页，_notInIds 反选一张）。
+ * 状态回到未结算，结算数量、时间和操作人清空，前面补上的数量保留。
  */
 export default class extends TestCase {
   constructor() {
     super({
-      remark: '餐厅、供应商缺中间状态时检查并批量结算；跨页反选一张，核对笔数和库存'
+      remark: '餐厅、供应商缺中间状态时检查并批量结算；跨页反选一张后批量取消，核对笔数和库存'
     })
   }
 
@@ -98,11 +100,15 @@ export default class extends TestCase {
         CheckUtil.expectNotNull(excluded, '反选明细')
         CheckUtil.expectEqual(excluded.instockCnt == null, true, '反选的明细没有入库数量')
         CheckUtil.expectEqual(excluded.statementCnt == null, true, '反选的明细没有结算数量')
+        CheckUtil.expectEqual(excluded.statementTime == null, true, '反选的明细没有结算时间')
+        CheckUtil.expectEqual(excluded.statementUser == null, true, '反选的明细没有结算人')
         let settled = rows.filter(row => String(row.noteId) !== String(variable.noteC))
         for (let row of settled) {
           expectCnt(row.instockCnt, row.buyUnitFee, CNT, '餐厅入库数量')
           expectCnt(row.statementCnt, row.buyUnitFee, CNT, '餐厅结算数量')
           CheckUtil.expectNotNull(row.instockTime, '明细入库时间')
+          CheckUtil.expectNotNull(row.statementTime, '明细结算时间')
+          CheckUtil.expectEqual(Number(row.statementUser), Number(variable.usersId), '明细结算人')
           CheckUtil.expectEqual(
             StockUtil.isEqPrice(
               { price: row.price, buyUnitFee: row.stockBuyUnitFee },
@@ -129,6 +135,40 @@ export default class extends TestCase {
         }
         let excluded = rows.filter(row => String(row.noteItemId) === String(variable.storeExcludedItem) && row.type == 'Instock')
         CheckUtil.expectEqual(excluded.length, 0, '反选的订单没有入库流水')
+      }),
+
+      batchCancelBySch('跨页取消餐厅结算', 'warehouse', 'statement', 'noteD')
+        .setRemark('已结算 3 张。_schParam 状态 statement，不带分页，反选 noteD').setHighlight(),
+
+      batchCancelByIds('取消餐厅已入库', 'warehouse', ['noteD'])
+        .setRemark('正常参数 noteIds，取消反选留下的已入库单').setHighlight(),
+
+      queryNotes('取消结算后餐厅订单', 'warehouse', ['noteA', 'noteB', 'noteC', 'noteD'], (rows) => {
+        let excluded = rows.find(row => String(row.noteId) === String(variable.noteC))
+        CheckUtil.expectNotNull(excluded, '反选的订单')
+        CheckUtil.expectEqual(excluded.status, 'normal', '反选的订单仍是待入库')
+        let cancelled = rows.filter(row => String(row.noteId) !== String(variable.noteC))
+        CheckUtil.expectEqual(cancelled.length, 3, '取消结算的餐厅订单')
+        for (let row of cancelled) {
+          CheckUtil.expectEqual(row.status, 'instocked', '取消后餐厅状态')
+          CheckUtil.expectEqual(Number(row.statementCost), 0, '取消后餐厅结算金额')
+          CheckUtil.expectEqual(row.statementTime == null, true, '取消后餐厅结算时间')
+          CheckUtil.expectNotNull(row.instockTime, '取消后餐厅入库时间仍在')
+        }
+      }),
+
+      queryItems('取消结算后餐厅明细', ['noteA', 'noteB', 'noteC', 'noteD'], (rows) => {
+        let excluded = rows.find(row => String(row.noteId) === String(variable.noteC))
+        CheckUtil.expectNotNull(excluded, '反选明细')
+        CheckUtil.expectEqual(excluded.statementCnt == null, true, '反选的明细没有结算数量')
+        let cancelled = rows.filter(row => String(row.noteId) !== String(variable.noteC))
+        for (let row of cancelled) {
+          expectCnt(row.instockCnt, row.buyUnitFee, CNT, '取消后餐厅入库数量')
+          CheckUtil.expectNotNull(row.instockTime, '取消后明细入库时间仍在')
+          CheckUtil.expectEqual(row.statementCnt == null, true, '取消后明细结算数量')
+          CheckUtil.expectEqual(row.statementTime == null, true, '取消后明细结算时间')
+          CheckUtil.expectEqual(row.statementUser == null, true, '取消后明细结算人')
+        }
       }),
 
       new AddWarehouse({
@@ -215,7 +255,11 @@ export default class extends TestCase {
         CheckUtil.expectNotNull(excluded, '反选明细')
         CheckUtil.expectNotNull(done, '已出库明细')
         CheckUtil.expectEqual(excluded.pickCnt == null, true, '反选的明细没有拣货数量')
+        CheckUtil.expectEqual(excluded.statementTime == null, true, '反选的明细没有结算时间')
+        CheckUtil.expectEqual(excluded.statementUser == null, true, '反选的明细没有结算人')
         expectCnt(done.statementCnt, done.buyUnitFee, CNT, '已出库单结算数量')
+        CheckUtil.expectNotNull(done.statementTime, '已出库单结算时间')
+        CheckUtil.expectEqual(Number(done.statementUser), Number(variable.usersId), '已出库单结算人')
         variable.supplierItemIds = []
         variable.supplierOutItem = done.noteItemId
         variable.supplierExcludedItem = excluded.noteItemId
@@ -229,6 +273,8 @@ export default class extends TestCase {
           CheckUtil.expectNotNull(row.pickTime, '明细拣货时间')
           CheckUtil.expectNotNull(row.sendTime, '明细发货时间')
           CheckUtil.expectNotNull(row.outStockTime, '明细出库时间')
+          CheckUtil.expectNotNull(row.statementTime, '明细结算时间')
+          CheckUtil.expectEqual(Number(row.statementUser), Number(variable.usersId), '明细结算人')
           variable.supplierItemIds.push(row.noteItemId)
         }
       }),
@@ -244,6 +290,50 @@ export default class extends TestCase {
         }
         let excluded = rows.filter(row => String(row.noteItemId) === String(variable.supplierExcludedItem) && row.type == 'send')
         CheckUtil.expectEqual(excluded.length, 0, '反选的订单没有发货流水')
+      }),
+
+      batchCancelBySch('跨页取消供应商结算', 'supplierWarehouse', 'statement', 'noteOut')
+        .setRemark('已结算 3 张。_schParam 状态 statement，不带分页，反选 noteOut').setHighlight(),
+
+      batchCancelByIds('取消供应商已出库', 'supplierWarehouse', ['noteOut'])
+        .setRemark('正常参数 noteIds，取消反选留下的已出库单').setHighlight(),
+
+      queryNotes('取消结算后供应商订单', 'supplierWarehouse', ['noteE', 'noteF', 'noteG', 'noteOut'], (rows) => {
+        let excluded = rows.find(row => String(row.noteId) === String(variable.noteG))
+        CheckUtil.expectNotNull(excluded, '反选的供应商订单')
+        CheckUtil.expectEqual(excluded.status, 'accept', '反选的订单仍是待拣货')
+        for (let key of ['noteE', 'noteF', 'noteOut']) {
+          let row = rows.find(item => String(item.noteId) === String(variable[key]))
+          CheckUtil.expectNotNull(row, key)
+          CheckUtil.expectEqual(row.status, 'outstocked', '取消后供应商状态')
+          CheckUtil.expectEqual(Number(row.statementCost), 0, '取消后供应商结算金额')
+          CheckUtil.expectEqual(row.statementTime == null, true, '取消后供应商结算时间')
+          CheckUtil.expectNotNull(row.outstockTime, '取消后出库时间仍在')
+        }
+      }),
+
+      queryItems('取消结算后供应商明细', ['noteE', 'noteF', 'noteG', 'noteOut'], (rows) => {
+        let excluded = rows.find(row => String(row.noteId) === String(variable.noteG))
+        let done = rows.find(row => String(row.noteId) === String(variable.noteOut))
+        CheckUtil.expectNotNull(excluded, '反选明细')
+        CheckUtil.expectNotNull(done, '已出库明细')
+        CheckUtil.expectEqual(excluded.statementCnt == null, true, '反选的明细没有结算数量')
+        CheckUtil.expectEqual(done.statementCnt == null, true, '取消后已出库单结算数量')
+        CheckUtil.expectEqual(done.statementTime == null, true, '取消后已出库单结算时间')
+        CheckUtil.expectEqual(done.statementUser == null, true, '取消后已出库单结算人')
+        expectCnt(done.outstockCnt, done.buyUnitFee, CNT, '取消后已出库数量仍在')
+        for (let key of ['noteE', 'noteF']) {
+          let row = rows.find(item => String(item.noteId) === String(variable[key]))
+          CheckUtil.expectNotNull(row, key)
+          expectCnt(row.pickCnt, row.buyUnitFee, CNT, '取消后拣货数量')
+          expectCnt(row.sendCnt, row.buyUnitFee, CNT, '取消后发货数量')
+          expectCnt(row.outstockCnt, row.buyUnitFee, CNT, '取消后出库数量')
+          CheckUtil.expectNotNull(row.pickTime, '取消后明细拣货时间仍在')
+          CheckUtil.expectNotNull(row.outStockTime, '取消后明细出库时间仍在')
+          CheckUtil.expectEqual(row.statementCnt == null, true, '取消后明细结算数量')
+          CheckUtil.expectEqual(row.statementTime == null, true, '取消后明细结算时间')
+          CheckUtil.expectEqual(row.statementUser == null, true, '取消后明细结算人')
+        }
       })
     ]
   }
@@ -425,6 +515,51 @@ function batchByIds(name: string, warehouseKey: WarehouseType, noteVars: string[
     warehouseType: warehouseKey,
     parseHttpParam(param, variable) {
       param.noteIds = noteVars.map(key => variable[key])
+      return param
+    }
+  })
+}
+
+function batchCancelByIds(name: string, warehouseKey: WarehouseType, noteVars: string[]): Action {
+  return new Action({
+    name,
+    url: '/app/note/batchCancelStatmentNote',
+    method: 'POST',
+    param: {
+      noteIds: [],
+      ...warehouseParam(warehouseKey)
+    }
+  }, {
+    warehouseType: warehouseKey,
+    parseHttpParam(param, variable) {
+      param.noteIds = noteVars.map(key => variable[key])
+      return param
+    }
+  })
+}
+
+function batchCancelBySch(
+  name: string,
+  warehouseKey: WarehouseType,
+  status: string,
+  notInVar: string
+): Action {
+  return new Action({
+    name,
+    url: '/app/note/batchCancelStatmentNote',
+    method: 'POST',
+    param: {
+      _schParam: {
+        status,
+        _notInIds: [],
+        ...warehouseParam(warehouseKey)
+      },
+      ...warehouseParam(warehouseKey)
+    }
+  }, {
+    warehouseType: warehouseKey,
+    parseHttpParam(param, variable) {
+      param._schParam._notInIds = [variable[notInVar]]
       return param
     }
   })
