@@ -1,5 +1,8 @@
 import { ArrayUtil, BaseTest, CheckUtil, TestCase } from "testflow";
+import StockUtil from "../../util/StockUtil";
 import PreTestWithMeat from "../PreTestWithMeat";
+import AddMaterial from "../../action/material/AddMaterial";
+import ListMaterial from "../../action/material/ListMaterial";
 import Action from "../../action/Action";
 import Recal from "../../action/Recal";
 import CheckStock from "../../action/CheckStock";
@@ -13,17 +16,19 @@ import ListNoteGroup from "../../action/note/ListNoteGroup";
  * 物料规格见 PreTestWithMeat：
  * - 羊肉/猪肉：标准单位=克；按包用 buyUnitFee=-100
  * - 牛肉：标准单位=包；按包用 buyUnitFee=1
+ * - 西瓜：标准单位=个；buyUnitFee=1，其他入库单价 10 元/个
  *
  * 库存时间轴：
  * - 5/1、6/1 盘点（绝对库存，1元/g）
  * - 7/1 createNote→发送→入库（累加，2元/g），再 updateNoteTime 改业务日
- * - 之后 OtherUse 增删改与改日期
+ * - 之后 OtherUse 增删改与改日期（isAdd=0）
+ * - 删除后再做其他入库（isAdd=1，赠予）：含西瓜 5 个，再改为 8 个并删除猪肉
  *
  * md「牛肉改为1包50g」按 1包+50g=150g=1.5包；「周肉」按猪肉。
  */
 export default class extends TestCase {
   constructor() {
-    super({ remark: '其他消耗：盘点→订单入库→消耗→改明细→改日期→删除，并校验库存' })
+    super({ remark: '其他消耗：盘点→订单入库→消耗→改明细→改日期→删除→其他入库，并校验库存和金额' })
   }
 
   getName(): string {
@@ -34,6 +39,12 @@ export default class extends TestCase {
     const variable = this.getVariable()
     return [
       new PreTestWithMeat(),
+      new AddMaterial('西瓜', {
+        buyUnit: [{ name: '个', fee: 1 }],
+        categoryId: '${categoryMap.蔬菜}',
+        code: 'MAT004'
+      }),
+      new ListMaterial(),
 
       this.buildInventoryAction({
         remark: '5月1日盘点：牛肉1包、羊肉2包、猪肉300g，单价1元/g',
@@ -96,6 +107,7 @@ export default class extends TestCase {
           otherUseId: '${otherUseId}',
           warehouseId: '${warehouse.warehouseId}',
           openTypeId: '${otherTypeMap.报损}',
+          isAdd: 0,
           remark: '改明细',
           createTime: '2026-07-02',
           otherItems: [
@@ -204,6 +216,84 @@ export default class extends TestCase {
         otherUseCnt: 0,
         otherItemCnt: 0,
         otherUseStockRecordCnt: 0
+      }, variable),
+
+      new AddOtherInstockJuly3(),
+
+      // 删除后基数 牛5/800、羊7/1100、猪900/1400
+      // 入库：牛肉2包×50元=100，猪肉100g×3元=300，西瓜5个×10元=50
+      ...this.buildVerify({
+        remark: '7/3其他入库后：牛7包/羊7包/猪1000g/西瓜5个，金额100+300+50',
+        name: '校验其他入库后库存',
+        stocks: [
+          { name: '牛肉', cnt: 7, buyUnitFee: 1, cost: 900 },
+          { name: '羊肉', cnt: 7, buyUnitFee: -100, cost: 1100 },
+          { name: '猪肉', cnt: 1000, buyUnitFee: 1, cost: 1700 },
+          { name: '西瓜', cnt: 5, buyUnitFee: 1, cost: 50 }
+        ],
+        otherUseCnt: 1,
+        otherItemCnt: 3,
+        otherUseStockRecordCnt: 0,
+        instock: {
+          otherUseCost: 450,
+          lines: [
+            { name: '牛肉', cnt: 2, buyUnitFee: 1, price: 50, stockBuyUnitFee: 1, cost: 100 },
+            { name: '猪肉', cnt: 100, buyUnitFee: 1, price: 3, stockBuyUnitFee: 1, cost: 300 },
+            { name: '西瓜', cnt: 5, buyUnitFee: 1, price: 10, stockBuyUnitFee: 1, cost: 50 }
+          ]
+        }
+      }, variable),
+
+      new Action({
+        name: '更改其他入库',
+        remark: '西瓜改为8个，删除猪肉；牛肉2包保持不变',
+        url: '/app/otherUse/saveOtherUse',
+        param: {
+          otherUseId: '${otherInstockId}',
+          warehouseId: '${warehouse.warehouseId}',
+          openTypeId: '${otherInstockTypeId}',
+          isAdd: 1,
+          remark: '7月3日其他入库',
+          createTime: '2026-07-03',
+          otherItems: [
+            {
+              materialId: '${materialMap.牛肉.materialId}',
+              cnt: 2,
+              buyUnitFee: 1,
+              price: 50,
+              stockBuyUnitFee: 1
+            },
+            {
+              materialId: '${materialMap.西瓜.materialId}',
+              cnt: 8,
+              buyUnitFee: 1,
+              price: 10,
+              stockBuyUnitFee: 1
+            }
+          ]
+        }
+      }),
+
+      // 去掉猪肉入库后回到 900g/1400；西瓜 8×10=80；牛肉仍 +100
+      ...this.buildVerify({
+        remark: '改其他入库后：西瓜8个，猪肉回到900g，牛肉仍为7包',
+        name: '校验更改其他入库后库存',
+        stocks: [
+          { name: '牛肉', cnt: 7, buyUnitFee: 1, cost: 900 },
+          { name: '羊肉', cnt: 7, buyUnitFee: -100, cost: 1100 },
+          { name: '猪肉', cnt: 900, buyUnitFee: 1, cost: 1400 },
+          { name: '西瓜', cnt: 8, buyUnitFee: 1, cost: 80 }
+        ],
+        otherUseCnt: 1,
+        otherItemCnt: 2,
+        otherUseStockRecordCnt: 0,
+        instock: {
+          otherUseCost: 180,
+          lines: [
+            { name: '牛肉', cnt: 2, buyUnitFee: 1, price: 50, stockBuyUnitFee: 1, cost: 100 },
+            { name: '西瓜', cnt: 8, buyUnitFee: 1, price: 10, stockBuyUnitFee: 1, cost: 80 }
+          ]
+        }
       }, variable)
     ]
   }
@@ -254,6 +344,17 @@ export default class extends TestCase {
     otherUseCnt?: number
     otherItemCnt?: number
     otherUseStockRecordCnt?: number
+    instock?: {
+      otherUseCost: number
+      lines: Array<{
+        name: string
+        cnt: number
+        buyUnitFee: number
+        price: number
+        stockBuyUnitFee: number
+        cost: number
+      }>
+    }
   }, variable: any): BaseTest[] {
     let actions: BaseTest[] = [
       new Recal().setRemark(`${opt.remark}·重算`),
@@ -286,6 +387,65 @@ export default class extends TestCase {
           query: { type: 'otherUse' }
         }
       ]).setRemark(`${opt.remark}·校验条数`))
+    }
+    if (opt.instock != null) {
+      let instock = opt.instock
+      actions.push(new CheckArray([{
+        table: 'otherUse',
+        query: {
+          otherUseId: '${otherInstockId}',
+          warehouseId: '${warehouse.warehouseId}',
+          isDel: 0
+        },
+        check(array) {
+          CheckUtil.expectEqual(array.length, 1, `${opt.name}:其他入库单据不存在`)
+          CheckUtil.expectEqual(Number(array[0].isAdd), 1, `${opt.name}:isAdd应为1`)
+          CheckUtil.expectEqual(Number(array[0].cost), instock.otherUseCost, `${opt.name}:单据金额与单价不一致`)
+        }
+      }, {
+        table: 'otherItem',
+        query: {
+          otherUseId: '${otherInstockId}',
+          warehouseId: '${warehouse.warehouseId}',
+          isDel: 0
+        },
+        check(array) {
+          for (let line of instock.lines) {
+            let materialId = variable.materialMap?.[line.name]?.materialId
+            let row = array.find((item: any) => String(item.materialId) === String(materialId))
+            CheckUtil.expectEqual(row != null, true, `${opt.name}:${line.name}明细不存在`)
+            CheckUtil.expectEqual(StockUtil.isEq(
+              { cnt: Number(row.cnt), buyUnitFee: Number(row.buyUnitFee) },
+              { cnt: line.cnt, buyUnitFee: line.buyUnitFee }
+            ), true, `${opt.name}:${line.name}数量不对`)
+            CheckUtil.expectEqual(StockUtil.isEqPrice(
+              { price: Number(row.price), buyUnitFee: Number(row.stockBuyUnitFee) },
+              { price: line.price, buyUnitFee: line.stockBuyUnitFee }
+            ), true, `${opt.name}:${line.name}单价不对`)
+          }
+        }
+      }, {
+        table: 'stockRecord',
+        query: {
+          type: 'otherInstock',
+          warehouseId: '${warehouse.warehouseId}',
+          isDel: 0
+        },
+        check(array) {
+          CheckUtil.expectEqual(array.length, instock.lines.length, `${opt.name}:其他入库流水条数不对`)
+          for (let line of instock.lines) {
+            let materialId = variable.materialMap?.[line.name]?.materialId
+            let row = array.find((item: any) => String(item.materialId) === String(materialId))
+            CheckUtil.expectEqual(row != null, true, `${opt.name}:${line.name}流水不存在`)
+            CheckUtil.expectEqual(StockUtil.isEq(
+              { cnt: Number(row.cnt), buyUnitFee: Number(row.buyUnitFee) },
+              { cnt: line.cnt, buyUnitFee: line.buyUnitFee }
+            ), true, `${opt.name}:${line.name}流水数量不对`)
+            CheckUtil.expectEqual(Number(row.cost), line.cost, `${opt.name}:${line.name}流水金额与单价不一致`)
+            CheckUtil.expectEqual(row.calType, 'add', `${opt.name}:${line.name}流水方向应为入库`)
+          }
+        }
+      }]).setRemark(`${opt.remark}·校验其他入库单价`))
     }
     return [
       new VerifyStep({
@@ -429,7 +589,9 @@ class AddOtherUseJuly2 extends TestCase {
         name: '查询消耗类型',
         remark: '拉取 OtherType，拿到报损 id',
         url: '/app/otherType/listOtherType',
-        param: {}
+        param: {
+          isAdd: 0
+        }
       }, {
         buildVariable(result) {
           let content = result.result.content ?? []
@@ -445,6 +607,7 @@ class AddOtherUseJuly2 extends TestCase {
         param: {
           warehouseId: '${warehouse.warehouseId}',
           openTypeId: '${otherTypeMap.报损}',
+          isAdd: 0,
           remark: '7月2日消耗',
           createTime: '2026-07-02',
           otherItems: [
@@ -464,6 +627,79 @@ class AddOtherUseJuly2 extends TestCase {
         buildVariable(result) {
           return {
             otherUseId: result.result.otherUseId
+          }
+        }
+      })
+    ]
+  }
+}
+
+/** 查询赠予类型 + 7月3日其他入库。牛肉50元/包，猪肉3元/g，西瓜10元/个。 */
+class AddOtherInstockJuly3 extends TestCase {
+  constructor() {
+    super({ remark: '新增7月3日其他入库：牛肉2包50元/包、猪肉100g 3元/g、西瓜5个10元/个（赠予）' })
+  }
+
+  getName(): string {
+    return '新增7月3日其他入库'
+  }
+
+  protected buildActions(): BaseTest[] {
+    return [
+      new Action({
+        name: '查询入库类型',
+        remark: '拉取 isAdd=1 的 OtherType，拿到赠予 id',
+        url: '/app/otherType/listOtherType',
+        param: {
+          isAdd: 1
+        }
+      }, {
+        buildVariable(result) {
+          let content = result.result.content ?? []
+          let gift = content.find((row: any) => row.name == '赠予')
+          return {
+            otherInstockTypeId: gift?.otherTypeId
+          }
+        }
+      }),
+      new Action({
+        name: '保存其他入库(7月3日)',
+        remark: '赠予：牛肉2包×50元，猪肉100g×3元，西瓜5个×10元',
+        url: '/app/otherUse/saveOtherUse',
+        param: {
+          warehouseId: '${warehouse.warehouseId}',
+          openTypeId: '${otherInstockTypeId}',
+          isAdd: 1,
+          remark: '7月3日其他入库',
+          createTime: '2026-07-03',
+          otherItems: [
+            {
+              materialId: '${materialMap.牛肉.materialId}',
+              cnt: 2,
+              buyUnitFee: 1,
+              price: 50,
+              stockBuyUnitFee: 1
+            },
+            {
+              materialId: '${materialMap.猪肉.materialId}',
+              cnt: 100,
+              buyUnitFee: 1,
+              price: 3,
+              stockBuyUnitFee: 1
+            },
+            {
+              materialId: '${materialMap.西瓜.materialId}',
+              cnt: 5,
+              buyUnitFee: 1,
+              price: 10,
+              stockBuyUnitFee: 1
+            }
+          ]
+        }
+      }, {
+        buildVariable(result) {
+          return {
+            otherInstockId: result.result.otherUseId
           }
         }
       })

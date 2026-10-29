@@ -188,13 +188,18 @@ function checkInstockUpdateHis(rows: any[], materialMap: any) {
     '香蕉原入库数量'
   );
   CheckUtil.expectEqual(
-    StockUtil.isEq(hisCnt(banana.data.newData, 'instockCnt'), { cnt: 3.5, buyUnitFee: 1 }),
+    StockUtil.isEq(hisCnt(banana.data.newData, 'instockCnt'), { cnt: 3, buyUnitFee: 1 }),
     true,
-    '香蕉新入库数量'
+    '香蕉入库数量不变，3.5包是对账草稿'
+  );
+  CheckUtil.expectEqual(
+    StockUtil.isEq(hisCnt(banana.data.newData, 'statementCnt'), { cnt: 3.5, buyUnitFee: 1 }),
+    true,
+    '香蕉对账草稿'
   );
   let detail = String(banana.data?.detail ?? '');
   CheckUtil.expectEqual(detail.indexOf('原来') >= 0 && detail.indexOf('新') >= 0, true, `香蕉明细 ${detail}`);
-  CheckUtil.expectEqual(detail.indexOf('价格') >= 0 && detail.indexOf('数量') >= 0, true, `香蕉明细应含价格和数量 ${detail}`);
+  CheckUtil.expectEqual(detail.indexOf('价格') >= 0, true, `香蕉明细应含价格 ${detail}`);
   CheckUtil.expectEqual(banana.data?.remark, '修改订单物料:香蕉', '历史备注不写客户端备注');
 
   let grape = ofMaterial('葡萄').find(row => row.data?.oldData != null);
@@ -222,9 +227,14 @@ function checkInstockUpdateHis(rows: any[], materialMap: any) {
   let apple = ofMaterial('苹果').find(row => row.data?.oldData == null && row.data?.newData?.isDel != 1);
   CheckUtil.expectEqual(apple != null, true, '应有苹果新增历史');
   CheckUtil.expectEqual(
-    StockUtil.isEq(hisCnt(apple.data.newData, 'instockCnt'), { cnt: 2, buyUnitFee: 1 }),
+    StockUtil.isEq(hisCnt(apple.data.newData, 'statementCnt'), { cnt: 2, buyUnitFee: 1 }),
     true,
-    '苹果新增入库数量'
+    '苹果新增写的是对账数量'
+  );
+  CheckUtil.expectEqual(
+    StockUtil.isEq(hisCnt(apple.data.newData, 'instockCnt'), { cnt: 0, buyUnitFee: 1 }),
+    true,
+    '苹果没有入库数量'
   );
   CheckUtil.expectEqual(
     StockUtil.isEqPrice(hisPrice(apple.data.newData), { price: 10, buyUnitFee: 1 }),
@@ -332,6 +342,8 @@ function checkOrder(opt: {
   materialCnt: number;
   moneyCol: string;
   money: number;
+  /** 同一张订单上还要核对的金额列 */
+  also?: { col: string, money: number }[];
   items: ItemExpect[];
 }): BaseTest[] {
   return [
@@ -347,6 +359,9 @@ function checkOrder(opt: {
         let row = result.result.content[0];
         CheckUtil.expectEqual(row.materialCnt, opt.materialCnt, `${opt.name}物料数量`);
         CheckUtil.expectEqual(Number(row[opt.moneyCol]), opt.money, `${opt.name}${opt.moneyCol}`);
+        for (let extra of opt.also ?? []) {
+          CheckUtil.expectEqual(Number(row[extra.col]), extra.money, `${opt.name}${extra.col}`);
+        }
       }
     }),
     new QueryAction({
@@ -519,13 +534,13 @@ function stockStep(
 }
 
 /**
- * 餐厅：改订货、入库、结算。
- * 供应商：待接单到结算。接单改的是订货数量。发货才动库存。
- * 修改物料接口只高亮入库后那一次。
+ * 餐厅：待入库改入库草稿，入库后改对账草稿；改价且已入库要重算金额并刷新库存流水。
+ * 供应商：待接单和接单改拣货草稿，拣货后改发货草稿；已发货改出库草稿，改价要重算发货金额并刷新发货流水。
+ * 已对账不能再改。修改物料接口只高亮入库后那一次。
  */
 export default class extends TestCase {
   constructor() {
-    super({ remark: '更改订单物料：餐厅订货/入库/结算，供应商待接单到结算' });
+    super({ remark: '更改订单物料：改下一状态数量。草稿不入库，改价且已入库或已发货要重算金额和库存流水' });
   }
 
   getName(): string {
@@ -539,8 +554,8 @@ export default class extends TestCase {
     let day10 = shiftDay(-10);
     let supplierStock = [
       { name: '白菜', cnt: 96.5 },
-      { name: '黄瓜', cnt: 98 },
-      { name: '土豆', cnt: 98 },
+      { name: '黄瓜', cnt: 96 },
+      { name: '土豆', cnt: 100 },
       { name: '萝卜', cnt: 100 }
     ];
     return [
@@ -552,7 +567,7 @@ export default class extends TestCase {
       ...this.restaurant(variable, day3),
       ...this.supplierPrepare(variable, today, day10),
       ...this.linkAndSend(),
-      ...this.supplierFlow(variable, day3, supplierStock)
+      ...this.supplierFlow(variable, supplierStock)
     ];
   }
 
@@ -572,7 +587,8 @@ export default class extends TestCase {
       sendOrder('发送餐厅订单'),
       loadItems('读取订货物料', 'storeNoteId', 'warehouse'),
       updateItems({
-        name: '修改订货数量',
+        name: '待入库改入库草稿',
+        remark: 'normal 改的是入库数量。已有行进 note_cnt，新增行直接写 instockCnt。订货数量和订货金额不变',
         noteVar: 'storeNoteId',
         warehouseKey: 'warehouse',
         updates: [{ name: '香蕉', cnt: pack(3) }],
@@ -583,16 +599,16 @@ export default class extends TestCase {
         ]
       }),
       ...checkOrder({
-        name: '订货修改后',
+        name: '待入库修改后',
         noteVar: 'storeNoteId',
         warehouseKey: 'warehouse',
         materialCnt: 3,
         moneyCol: 'cost',
-        money: yuan(3 + 4 + 5),
+        money: yuan(2),
         items: [
-          { name: '香蕉', purcharse: pack(3) },
-          { name: '葡萄', purcharse: pack(4) },
-          { name: '番茄', purcharse: pack(5) }
+          { name: '香蕉', purcharse: pack(2), instock: pack(3) },
+          { name: '葡萄', purcharse: pack(0), instock: pack(4) },
+          { name: '番茄', purcharse: pack(0), instock: pack(5) }
         ]
       }),
 
@@ -616,8 +632,8 @@ export default class extends TestCase {
       }),
       loadItems('读取入库物料', 'storeNoteId', 'warehouse'),
       updateItems({
-        name: '修改入库数量',
-        remark: 'POST /app/noteItem/updateNoteItem。改香蕉数量和单价，改葡萄，删除番茄，新增苹果',
+        name: '入库后改对账草稿并改价',
+        remark: 'POST /app/noteItem/updateNoteItem。instocked 改的是对账数量。香蕉改价，入库数量仍是3包，要重算入库金额并刷新库存流水',
         noteVar: 'storeNoteId',
         warehouseKey: 'warehouse',
         highlight: true,
@@ -648,46 +664,44 @@ export default class extends TestCase {
         warehouseKey: 'warehouse',
         materialCnt: 3,
         moneyCol: 'instockCost',
-        money: 3.5 * 20 + 4 * PRICE + 2 * PRICE,
+        money: 3 * 20 + 4 * PRICE,
+        also: [{ col: 'cost', money: 2 * 20 }],
         items: [
-          { name: '香蕉', purcharse: pack(3), instock: gram(3, 50), price: { price: 20, buyUnitFee: 1 }, remark: '香蕉改入库' },
-          { name: '葡萄', purcharse: pack(4), instock: pack(4) },
-          { name: '苹果', purcharse: pack(0), instock: pack(2), remark: '新增苹果' }
+          { name: '香蕉', purcharse: pack(2), instock: pack(3), statement: gram(3, 50), price: { price: 20, buyUnitFee: 1 }, remark: '香蕉改入库' },
+          { name: '葡萄', purcharse: pack(0), instock: pack(4), statement: pack(4) },
+          { name: '苹果', purcharse: pack(0), statement: pack(2), remark: '新增苹果' }
         ]
       }),
+      this.checkStockRecords('校验改价后的入库流水', 'warehouse', 'materialMap', variable, [
+        { name: '香蕉', type: 'Instock', cnt: 3, cost: 3 * 20 },
+        { name: '葡萄', type: 'Instock', cnt: 4, cost: 4 * PRICE }
+      ], [{ name: '番茄', type: 'Instock' }, { name: '苹果', type: 'Instock' }]),
       recalStock('重算入库库存', 'warehouse'),
       stockStep('入库修改后库存', 'warehouse', 'materialMap', variable, [
-        { name: '香蕉', cnt: 3.5 },
+        { name: '香蕉', cnt: 3 },
         { name: '葡萄', cnt: 4 },
-        { name: '苹果', cnt: 2 },
+        { name: '苹果', cnt: 0 },
         { name: '番茄', cnt: 0 }
       ]),
 
       processNote('结算餐厅订单', 'storeNoteId', 'statement', 'warehouse'),
-      loadItems('读取结算物料', 'storeNoteId', 'warehouse'),
-      updateItems({
-        name: '修改结算数量',
-        noteVar: 'storeNoteId',
-        warehouseKey: 'warehouse',
-        updates: [{ name: '香蕉', cnt: gram(4, 50) }],
-        dels: ['苹果', '葡萄'],
-        adds: [{ name: '番茄', cnt: pack(1), mapKey: 'materialMap' }]
-      }),
       ...checkOrder({
-        name: '结算修改后',
+        name: '结算后',
         noteVar: 'storeNoteId',
         warehouseKey: 'warehouse',
-        materialCnt: 2,
+        materialCnt: 3,
         moneyCol: 'statementCost',
-        money: 4.5 * 20 + 1 * PRICE,
+        money: 3.5 * 20 + 4 * PRICE + 2 * PRICE,
+        also: [{ col: 'instockCost', money: 3 * 20 + 4 * PRICE }],
         items: [
-          { name: '香蕉', statement: gram(4, 50), price: { price: 20, buyUnitFee: 1 }, remark: '香蕉改入库' },
-          { name: '番茄', purcharse: pack(0), statement: pack(1) }
+          { name: '香蕉', purcharse: pack(2), instock: pack(3), statement: gram(3, 50), price: { price: 20, buyUnitFee: 1 }, remark: '香蕉改入库' },
+          { name: '葡萄', purcharse: pack(0), instock: pack(4), statement: pack(4) },
+          { name: '苹果', purcharse: pack(0), statement: pack(2), remark: '新增苹果' }
         ]
       }),
       stockStep('结算后库存', 'warehouse', 'materialMap', variable, [
-        { name: '香蕉', cnt: 3.5 },
-        { name: '苹果', cnt: 2 },
+        { name: '香蕉', cnt: 3 },
+        { name: '苹果', cnt: 0 },
         { name: '葡萄', cnt: 4 },
         { name: '番茄', cnt: 0 }
       ]),
@@ -696,7 +710,7 @@ export default class extends TestCase {
     ];
   }
 
-  /** 餐厅退货单状态是 instocked，流水类型是 Back。改退货数量应扣减库存。 */
+  /** 退货单已是 instocked。再改数量是对账草稿，不改已发生的退货数量。改价要重算退货金额。 */
   private backFlow(variable: any): BaseTest[] {
     return [
       new QueryAction({
@@ -759,17 +773,18 @@ export default class extends TestCase {
       }),
       recalStock('重算退货后库存', 'warehouse'),
       stockStep('退货后库存', 'warehouse', 'materialMap', variable, [
-        { name: '香蕉', cnt: 2.5 },
-        { name: '苹果', cnt: 2 },
+        { name: '香蕉', cnt: 2 },
+        { name: '苹果', cnt: 0 },
         { name: '葡萄', cnt: 4 },
         { name: '番茄', cnt: 0 }
       ]),
       loadItems('读取退货物料', 'backNoteId', 'warehouse'),
       updateItems({
-        name: '修改退货数量',
+        name: '退货后改对账草稿并改价',
+        remark: '退货数量仍是1包。改价后入库金额按1包重算，库存数量不变',
         noteVar: 'backNoteId',
         warehouseKey: 'warehouse',
-        updates: [{ name: '香蕉', cnt: pack(2) }],
+        updates: [{ name: '香蕉', cnt: pack(2), price: { price: 30, buyUnitFee: 1 } }],
         adds: [{ name: '苹果', cnt: pack(1), mapKey: 'materialMap' }]
       }),
       ...checkOrder({
@@ -778,16 +793,19 @@ export default class extends TestCase {
         warehouseKey: 'warehouse',
         materialCnt: 2,
         moneyCol: 'instockCost',
-        money: 2 * 20 + PRICE,
+        money: 1 * 30,
         items: [
-          { name: '香蕉', purcharse: pack(1), instock: pack(2), price: { price: 20, buyUnitFee: 1 } },
-          { name: '苹果', purcharse: pack(0), instock: pack(1) }
+          { name: '香蕉', purcharse: pack(1), instock: pack(1), statement: pack(2), price: { price: 30, buyUnitFee: 1 } },
+          { name: '苹果', purcharse: pack(0), statement: pack(1) }
         ]
       }),
+      this.checkStockRecords('校验退货流水', 'warehouse', 'materialMap', variable, [
+        { name: '香蕉', type: 'Back', cnt: -1, cost: 0 }
+      ], [{ name: '苹果', type: 'Back' }]),
       recalStock('重算退货修改后库存', 'warehouse'),
       stockStep('退货修改后库存', 'warehouse', 'materialMap', variable, [
-        { name: '香蕉', cnt: 1.5 },
-        { name: '苹果', cnt: 1 },
+        { name: '香蕉', cnt: 2 },
+        { name: '苹果', cnt: 0 },
         { name: '葡萄', cnt: 4 },
         { name: '番茄', cnt: 0 }
       ])
@@ -938,7 +956,7 @@ export default class extends TestCase {
     ];
   }
 
-  private supplierFlow(variable: any, day3: string, supplierStock: { name: string, cnt: number }[]): BaseTest[] {
+  private supplierFlow(variable: any, supplierStock: { name: string, cnt: number }[]): BaseTest[] {
     let full = [
       { name: '白菜', cnt: 100 },
       { name: '萝卜', cnt: 100 },
@@ -960,7 +978,8 @@ export default class extends TestCase {
       }),
       loadItems('读取待接单物料', 'supplierNoteId', 'supplierWarehouse'),
       updateItems({
-        name: '修改待接单订货数量',
+        name: '待接单改拣货草稿',
+        remark: '供应商 normal 的下一列是 pickCnt。已有行进草稿，订货数量不变',
         noteVar: 'supplierNoteId',
         warehouseKey: 'supplierWarehouse',
         updates: [{ name: '白菜', cnt: pack(3) }],
@@ -976,11 +995,11 @@ export default class extends TestCase {
         warehouseKey: 'supplierWarehouse',
         materialCnt: 3,
         moneyCol: 'cost',
-        money: yuan(3 + 4 + 5),
+        money: yuan(2),
         items: [
-          { name: '白菜', purcharse: pack(3) },
-          { name: '黄瓜', purcharse: pack(4) },
-          { name: '土豆', purcharse: pack(5) }
+          { name: '白菜', purcharse: pack(2), pick: pack(3) },
+          { name: '黄瓜', purcharse: pack(0), pick: pack(4) },
+          { name: '土豆', purcharse: pack(0), pick: pack(5) }
         ]
       }),
       stockStep('待接单库存不变', 'supplierWarehouse', 'supplierMaterialMap', variable, full),
@@ -988,8 +1007,8 @@ export default class extends TestCase {
       processNote('接单', 'supplierNoteId', 'accept', 'supplierWarehouse', 'send'),
       loadItems('读取接单物料', 'supplierNoteId', 'supplierWarehouse'),
       updateItems({
-        name: '接单后修改订货数量',
-        remark: 'accept 改的是订货数量 cnt，不是拣货数量',
+        name: '接单后改拣货草稿',
+        remark: 'accept 的下一列仍是 pickCnt。黄瓜的拣货数量已经写在明细上，列表仍显示这一列',
         noteVar: 'supplierNoteId',
         warehouseKey: 'supplierWarehouse',
         updates: [
@@ -1005,11 +1024,11 @@ export default class extends TestCase {
         warehouseKey: 'supplierWarehouse',
         materialCnt: 3,
         moneyCol: 'cost',
-        money: yuan(3.5 + 4 + 2),
+        money: yuan(2),
         items: [
-          { name: '白菜', purcharse: gram(3, 50), pick: pack(0) },
-          { name: '黄瓜', purcharse: pack(4), pick: pack(0) },
-          { name: '萝卜', purcharse: pack(2), pick: pack(0) }
+          { name: '白菜', purcharse: pack(2), pick: gram(3, 50) },
+          { name: '黄瓜', purcharse: pack(0), pick: pack(4) },
+          { name: '萝卜', purcharse: pack(0), pick: pack(2) }
         ]
       }),
       stockStep('接单库存不变', 'supplierWarehouse', 'supplierMaterialMap', variable, full),
@@ -1017,7 +1036,8 @@ export default class extends TestCase {
       processNote('拣货', 'supplierNoteId', 'pick', 'supplierWarehouse', 'send'),
       loadItems('读取拣货物料', 'supplierNoteId', 'supplierWarehouse'),
       updateItems({
-        name: '修改拣货数量',
+        name: '拣货后改发货草稿',
+        remark: 'picked 的下一列是 sendCnt。拣货数量和拣货金额保持不变',
         noteVar: 'supplierNoteId',
         warehouseKey: 'supplierWarehouse',
         updates: [
@@ -1032,11 +1052,11 @@ export default class extends TestCase {
         warehouseKey: 'supplierWarehouse',
         materialCnt: 3,
         moneyCol: 'pickCost',
-        money: yuan(3.5 + 4 + 1),
+        money: yuan(3.5 + 4 + 2),
         items: [
-          { name: '白菜', purcharse: gram(3, 50), pick: gram(3, 50) },
-          { name: '黄瓜', purcharse: pack(4), pick: pack(4) },
-          { name: '萝卜', purcharse: pack(2), pick: pack(1) }
+          { name: '白菜', purcharse: pack(2), pick: gram(3, 50), send: gram(3, 50) },
+          { name: '黄瓜', purcharse: pack(0), pick: pack(4), send: pack(4) },
+          { name: '萝卜', purcharse: pack(0), pick: pack(2), send: pack(1) }
         ]
       }),
       stockStep('拣货库存不变', 'supplierWarehouse', 'supplierMaterialMap', variable, full),
@@ -1049,23 +1069,14 @@ export default class extends TestCase {
         { name: '萝卜', cnt: 99 },
         { name: '土豆', cnt: 100 }
       ]),
-      new Action({
-        name: '发货时间改成3天前',
-        remark: '改 note.sendTime。新发货流水的时间取这个发货时间',
-        url: '/free/update',
-        param: {
-          table: 'note',
-          cdts: [{ col: 'noteId', val: '${supplierNoteId}' }],
-          data: { sendTime: `${day3} 12:00:00` }
-        }
-      }),
       loadItems('读取发货物料', 'supplierNoteId', 'supplierWarehouse'),
       updateItems({
-        name: '修改发货数量',
+        name: '发货后改出库草稿并改价',
+        remark: 'sended 的下一列是出库数量。白菜改价，发货数量仍是3包50g，要重算发货金额并刷新发货流水。删除萝卜会退回已发货库存',
         noteVar: 'supplierNoteId',
         warehouseKey: 'supplierWarehouse',
         updates: [
-          { name: '白菜', cnt: gram(3, 50) },
+          { name: '白菜', cnt: pack(2), price: { price: 20, buyUnitFee: 1 } },
           { name: '黄瓜', cnt: pack(2) }
         ],
         dels: ['萝卜'],
@@ -1077,26 +1088,29 @@ export default class extends TestCase {
         warehouseKey: 'supplierWarehouse',
         materialCnt: 3,
         moneyCol: 'sendCost',
-        money: yuan(3.5 + 2 + 2),
+        money: 3.5 * 20 + 4 * PRICE,
+        also: [{ col: 'cost', money: 2 * 20 }],
         items: [
-          { name: '白菜', purcharse: gram(3, 50), pick: gram(3, 50), send: gram(3, 50) },
-          { name: '黄瓜', purcharse: pack(4), pick: pack(4), send: pack(2) },
-          { name: '土豆', purcharse: pack(0), pick: pack(0), send: pack(2) }
+          { name: '白菜', purcharse: pack(2), pick: gram(3, 50), send: gram(3, 50), outstock: pack(2), price: { price: 20, buyUnitFee: 1 } },
+          { name: '黄瓜', purcharse: pack(0), pick: pack(4), send: pack(4), outstock: pack(2) },
+          { name: '土豆', purcharse: pack(0), outstock: pack(2) }
         ]
       }),
+      this.checkStockRecords('校验改价后的发货流水', 'supplierWarehouse', 'supplierMaterialMap', variable, [
+        { name: '白菜', type: 'send', cnt: -3.5, cost: 0 },
+        { name: '黄瓜', type: 'send', cnt: -4, cost: 0 }
+      ], [{ name: '萝卜', type: 'send' }, { name: '土豆', type: 'send' }]),
       recalStock('重算发货库存', 'supplierWarehouse'),
       stockStep('发货修改后库存', 'supplierWarehouse', 'supplierMaterialMap', variable, supplierStock),
-      this.checkSendRecords(variable, day3),
 
       processNote('出库', 'supplierNoteId', 'outstock', 'supplierWarehouse', 'send'),
       loadItems('读取出库物料', 'supplierNoteId', 'supplierWarehouse'),
       updateItems({
-        name: '修改出库数量',
+        name: '出库后改对账草稿',
+        remark: 'outstocked 的下一列是对账数量。出库数量和库存不变',
         noteVar: 'supplierNoteId',
         warehouseKey: 'supplierWarehouse',
-        updates: [{ name: '白菜', cnt: pack(2) }],
-        dels: ['土豆'],
-        adds: [{ name: '萝卜', cnt: pack(1), mapKey: 'supplierMaterialMap' }]
+        updates: [{ name: '白菜', cnt: gram(4, 50) }]
       }),
       ...checkOrder({
         name: '出库修改后',
@@ -1104,55 +1118,53 @@ export default class extends TestCase {
         warehouseKey: 'supplierWarehouse',
         materialCnt: 3,
         moneyCol: 'outstockCost',
-        money: yuan(2 + 2 + 1),
+        money: 2 * 20 + 2 * PRICE + 2 * PRICE,
         items: [
-          { name: '白菜', send: gram(3, 50), outstock: pack(2) },
-          { name: '黄瓜', send: pack(2), outstock: pack(2) },
-          { name: '萝卜', purcharse: pack(0), pick: pack(0), send: pack(0), outstock: pack(1) }
+          { name: '白菜', send: gram(3, 50), outstock: pack(2), statement: gram(4, 50), price: { price: 20, buyUnitFee: 1 } },
+          { name: '黄瓜', send: pack(4), outstock: pack(2) },
+          { name: '土豆', purcharse: pack(0), outstock: pack(2) }
         ]
       }),
       stockStep('出库后库存不变', 'supplierWarehouse', 'supplierMaterialMap', variable, supplierStock),
 
       processNote('结算供应商订单', 'supplierNoteId', 'statement', 'supplierWarehouse'),
-      loadItems('读取供应商结算物料', 'supplierNoteId', 'supplierWarehouse'),
-      updateItems({
-        name: '修改供应商结算数量',
-        remark: '土豆已在出库时删除。萝卜出库时已加回，这里改结算数量',
-        noteVar: 'supplierNoteId',
-        warehouseKey: 'supplierWarehouse',
-        updates: [
-          { name: '白菜', cnt: gram(4, 50) },
-          { name: '萝卜', cnt: pack(1) }
-        ],
-        dels: ['黄瓜']
-      }),
       ...checkOrder({
-        name: '供应商结算修改后',
+        name: '供应商结算后',
         noteVar: 'supplierNoteId',
         warehouseKey: 'supplierWarehouse',
-        materialCnt: 2,
+        materialCnt: 3,
         moneyCol: 'statementCost',
-        money: yuan(4.5 + 1),
+        money: 4.5 * 20 + 2 * PRICE + 2 * PRICE,
         items: [
-          { name: '白菜', statement: gram(4, 50) },
-          { name: '萝卜', statement: pack(1) }
+          { name: '白菜', statement: gram(4, 50), price: { price: 20, buyUnitFee: 1 } },
+          { name: '黄瓜', statement: pack(2) },
+          { name: '土豆', statement: pack(2) }
         ]
       }),
       stockStep('结算后库存仍为发货后', 'supplierWarehouse', 'supplierMaterialMap', variable, supplierStock)
     ];
   }
 
-  /** 新增土豆的发货流水时间取订单发货时间。isDel=0 时 noteItemType+noteItemId 不重复。 */
-  private checkSendRecords(variable: any, sendDay: string): Action {
+  /**
+   * 核对未删除的库存流水。改价后采购入库流水的金额要变，发货/退货流水金额仍是 0、数量不变。
+   */
+  private checkStockRecords(
+    name: string,
+    warehouseKey: WarehouseType,
+    mapKey: string,
+    variable: any,
+    lines: { name: string, type: string, cnt: number, cost: number, day?: string }[],
+    absent: { name: string, type: string }[]
+  ): Action {
     return new Action({
-      name: '校验发货流水',
+      name,
       url: '/free/query',
       param: {
         array: [{
           table: 'stock_record',
           query: {
-            warehouseId: '${supplierWarehouse.warehouseId}',
-            warehouseGroupId: '${supplierWarehouse.warehouseGroupId}',
+            warehouseId: `\${${warehouseKey}.warehouseId}`,
+            warehouseGroupId: `\${${warehouseKey}.warehouseGroupId}`,
             isDel: 0
           }
         }]
@@ -1160,23 +1172,43 @@ export default class extends TestCase {
     }, {
       check(result) {
         let rows: any[] = result.result?.stock_record ?? [];
-        let keys = rows.map(row => `${row.noteItemType}_${row.noteItemId}`);
+        let keys = rows
+          .filter(row => row.noteItemId != null && row.noteItemId !== 0)
+          .map(row => `${row.noteItemType}_${row.noteItemId}_${row.type}`);
         CheckUtil.expectEqual(
           new Set(keys).size,
           keys.length,
-          `isDel=0 时 noteItemType+noteItemId 重复 ${JSON.stringify(keys)}`
+          `isDel=0 时 noteItemType+noteItemId+type 重复 ${JSON.stringify(keys)}`
         );
-        let items: any[] = variable.noteItems ?? [];
-        for (let item of items) {
-          let matched = rows.filter(row =>
-            String(row.noteItemId) === String(item.noteItemId)
+        let ofType = (materialName: string, type: string) => {
+          let materialId = variable[mapKey][materialName].materialId;
+          return rows.filter(row =>
+            String(row.materialId) === String(materialId)
             && row.noteItemType === 'noteItem'
-            && row.type === 'send'
+            && row.type === type
           );
-          CheckUtil.expectEqual(matched.length, 1, `${item.name}应有一条发货流水，实际${matched.length}`);
-          if (item.name === '土豆') {
-            CheckUtil.expectEqual(dayOf(matched[0].bussinessDate), sendDay, '土豆发货流水时间应取订单发货时间');
+        };
+        for (let line of lines) {
+          let matched = ofType(line.name, line.type);
+          CheckUtil.expectEqual(matched.length, 1, `${line.name}应有一条${line.type}流水，实际${matched.length}`);
+          if (matched.length === 0) {
+            continue;
           }
+          CheckUtil.expectEqual(
+            StockUtil.isEq(
+              { cnt: matched[0].cnt ?? 0, buyUnitFee: matched[0].buyUnitFee ?? 1 },
+              { cnt: line.cnt, buyUnitFee: 1 }
+            ),
+            true,
+            `${line.name}流水数量 实际=${matched[0].cnt} 期望=${line.cnt}`
+          );
+          CheckUtil.expectEqual(Number(matched[0].cost), line.cost, `${line.name}流水金额`);
+          if (line.day != null) {
+            CheckUtil.expectEqual(dayOf(matched[0].bussinessDate), line.day, `${line.name}流水时间`);
+          }
+        }
+        for (let line of absent) {
+          CheckUtil.expectEqual(ofType(line.name, line.type).length, 0, `${line.name}不应有${line.type}流水`);
         }
       }
     });

@@ -10,6 +10,8 @@ import QueryAction from "../../action/QueryAction";
 import UpdateCntAndPrice from "../../action/note/UpdateCntAndPrice";
 import Upload from "../../action/Upload";
 import path from "path";
+import StockUtil from "../../util/StockUtil";
+import BatchCancelInstockCase from "../note/BatchCancelInstockCase";
 
 function expectCols(row: any, expect: Record<string, any>, label: string) {
   CheckUtil.expectEqual(row != null, true, `${label}缺少行`)
@@ -34,6 +36,21 @@ function dayOf(value: any): string {
   return String(value).substring(0, 10)
 }
 
+/** 断言 listNote 当前状态的订单金额，并等于对应金额列 */
+function expectDefCnt(row: any, field: string, expected: number, label: string) {
+  CheckUtil.expectEqual(row != null, true, `${label}应能查到订单`)
+  CheckUtil.expectEqual(
+    Number(row.defCnt),
+    expected,
+    `${label}订单金额应为${expected}，实际=${row?.defCnt}`
+  )
+  CheckUtil.expectEqual(
+    Number(row.defCnt),
+    Number(row[field]),
+    `${label}订单金额应等于${field}，defCnt=${row?.defCnt}，${field}=${row?.[field]}`
+  )
+}
+
 /** 断言 noteItem 入库操作人与时间 */
 function checkInstockOp(rows: any[], usersId: any, expectDay: string | null, label: string) {
   CheckUtil.expectEqual(rows.length > 0, true, `${label}应有明细`)
@@ -55,6 +72,11 @@ function checkInstockOp(rows: any[], usersId: any, expectDay: string | null, lab
         `${label} noteItemId=${row.noteItemId} instockTime 应为${expectDay}，实际=${row.instockTime}`
       )
     }
+    CheckUtil.expectEqual(
+      StockUtil.isEq(row.defCnt, row.instock),
+      true,
+      `${label} ${row.name}已入库推荐数量应为入库数量`
+    )
   }
 }
 
@@ -252,7 +274,8 @@ export default class extends TestCase {
 
       this.buildPsiCheck(),
       ...this.buildDownloadSteps(variable),
-      ...this.buildBatchInstockOpCheck(variable)
+      ...this.buildBatchInstockOpCheck(variable),
+      new BatchCancelInstockCase()
     ]
   }
 
@@ -481,6 +504,20 @@ export default class extends TestCase {
       }).setRemark('手工单、7/4订单的 title 都等于自身 noteId'),
 
       new StatementJulyNotes(),
+
+      new QueryAction({
+        name: '校验已结算订单金额',
+        url: '/app/note/listNote',
+        query: { status: 'statement' }
+      }, {
+        check(result) {
+          let content: any[] = result.result.content ?? []
+          let find = (noteId: any) => content.find(row => String(row.noteId) === String(noteId))
+          expectDefCnt(find(variable.handNoteId), 'statementCost', 1000, '手工单已结算')
+          expectDefCnt(find(variable.note?.noteId), 'statementCost', 1200, '7/4订单已结算')
+          expectDefCnt(find(variable.backNoteId), 'statementCost', 300, '退货单已结算')
+        }
+      }).setHighlight(true).setRemark('已结算：defCnt 等于结算金额。手工单1000，7/4订单1200，退货单300'),
 
       this.buildStateByMaterialCheck(),
       this.buildStateByProductCheck(),
@@ -910,8 +947,24 @@ class StatementJulyNotes extends TestCase {
     return [
       this.buildOne('结算手工单', '${handNoteId}', 1000),
       this.buildOne('结算7/4订单', '${note.noteId}', 1200),
-      this.buildOne('结算退货单', '${backNoteId}', 300)
-    ]
+      this.buildOne('结算退货单', '${backNoteId}', 300),
+      new QueryAction({
+        name: '校验已结算推荐数量',
+        url: '/app/noteItem/listNoteItem',
+        query: { noteId: '${note.noteId}' }
+      }, {
+        check(result) {
+          let rows: any[] = result.result.content ?? []
+          CheckUtil.expectEqual(rows.length > 0, true, '已结算订单应有明细')
+          for (let row of rows) {
+            CheckUtil.expectEqual(
+              StockUtil.isEq(row.defCnt, row.statementCnt),
+              true,
+              `${row.name}已结算推荐数量应为结算数量`
+            )
+          }
+        }
+      }).setRemark('已结算：defCnt 等于结算数量')    ]
   }
 
   private buildOne(name: string, noteId: string, statementCost: number): BaseTest {
@@ -1122,6 +1175,33 @@ class OrderInstockJuly4 extends TestCase {
           status: 'normal'
         }
       }),
+      new QueryAction({
+        name: '校验待入库推荐数量',
+        url: '/app/noteItem/listNoteItem',
+        query: { noteId: '${note.noteId}' }
+      }, {
+        check(result) {
+          let rows: any[] = result.result.content ?? []
+          CheckUtil.expectEqual(rows.length > 0, true, '待入库应有明细')
+          for (let row of rows) {
+            CheckUtil.expectEqual(
+              StockUtil.isEq(row.defCnt, row.purcharse),
+              true,
+              `${row.name}待入库且没有关联发货、拣货时，推荐数量应为订货数量`
+            )
+          }
+        }
+      }).setRemark('待入库：defCnt 等于订货数量'),
+      new QueryAction({
+        name: '校验待入库订单金额',
+        url: '/app/note/listNote',
+        query: { noteId: '${note.noteId}' }
+      }, {
+        check(result) {
+          let row = (result.result.content ?? [])[0]
+          expectDefCnt(row, 'cost', 600, '待入库')
+        }
+      }).setHighlight(true).setRemark('待入库：订单金额 defCnt 等于订货金额 600'),
       new ListNoteGroup({
         groupType: 'NoteDay',
         status: 'normal'
@@ -1185,7 +1265,17 @@ class OrderInstockJuly4 extends TestCase {
             `物料途径订单 instockTime 不应为空，实际=${row?.instockTime}`
           )
         }
-      }).setRemark('物料途径：订单 instockTime 已写入')
+      }).setRemark('物料途径：订单 instockTime 已写入'),
+      new QueryAction({
+        name: '校验已入库订单金额',
+        url: '/app/note/listNote',
+        query: { noteId: '${note.noteId}' }
+      }, {
+        check(result) {
+          let row = (result.result.content ?? [])[0]
+          expectDefCnt(row, 'instockCost', 600, '已入库')
+        }
+      }).setHighlight(true).setRemark('已入库：订单金额 defCnt 等于入库金额 600')
     ]
   }
 }
@@ -1209,6 +1299,16 @@ class UpdatePriceJuly4 extends TestCase {
       }, {
         buildVariable(result) {
           return { noteItems: result.result.content }
+        },
+        check(result) {
+          let rows: any[] = result.result.content ?? []
+          for (let row of rows) {
+            CheckUtil.expectEqual(
+              StockUtil.isEq(row.defCnt, row.instock),
+              true,
+              `${row.name}已入库推荐数量应为入库数量`
+            )
+          }
         }
       }).setRemark('记下 noteItems，供 updatePrice 使用'),
       new UpdateCntAndPrice({
@@ -1220,7 +1320,18 @@ class UpdatePriceJuly4 extends TestCase {
           stockBuyUnitFee: 1,
           instockCnt: 3
         }]
-      }).setRemark('updatePrice：instockCnt=3, price=400, buyUnitFee=1, stockBuyUnitFee=1')
+      }).setRemark('updatePrice：instockCnt=3, price=400, buyUnitFee=1, stockBuyUnitFee=1'),
+      new QueryAction({
+        name: '校验改价后订单金额',
+        url: '/app/note/listNote',
+        query: { noteId: '${note.noteId}' }
+      }, {
+        check(result) {
+          let row = (result.result.content ?? [])[0]
+          CheckUtil.expectEqual(Number(row?.cost), 800, `改价后订货金额应为800，实际=${row?.cost}`)
+          expectDefCnt(row, 'instockCost', 1200, '改价后已入库')
+        }
+      }).setHighlight(true).setRemark('已入库改价后：defCnt 等于入库金额 1200，不是订货金额 800')
     ]
   }
 }
@@ -1290,6 +1401,16 @@ class BackJuly5 extends TestCase {
       }, {
         buildVariable(result) {
           return { backSrcItems: result.result.content }
+        },
+        check(result) {
+          let rows: any[] = result.result.content ?? []
+          for (let row of rows) {
+            CheckUtil.expectEqual(
+              StockUtil.isEq(row.defCnt, row.instock),
+              true,
+              `${row.name}已入库推荐数量应为入库数量`
+            )
+          }
         }
       }),
       new Action({
@@ -1309,7 +1430,8 @@ class BackJuly5 extends TestCase {
             price: row.price,
             supplierId: row.supplierId,
             materialId: row.materialId,
-            stockBuyUnitFee: 1
+            stockBuyUnitFee: 1,
+            remark: '牛肉退1包'
           }))
           return ret
         }
@@ -1335,6 +1457,19 @@ class BackJuly5 extends TestCase {
           }
         }
       }).setRemark('取退货单 noteId，title 应等于订单号'),
+      new QueryAction({
+        name: '校验退货明细备注',
+        url: '/app/noteItem/listNoteItem',
+        query: { noteId: '${backNoteId}' }
+      }, {
+        check(result) {
+          let rows: any[] = result.result.content ?? []
+          CheckUtil.expectEqual(rows.length > 0, true, '退货单应有明细')
+          for (let row of rows) {
+            CheckUtil.expectEqual(row.remark, '牛肉退1包', `${row.name}退货备注应为牛肉退1包，实际=${row.remark}`)
+          }
+        }
+      }).setRemark('退货明细 remark 写入 note_item'),
       new Action({
         name: '修改退货单时间为7月5日',
         remark: 'updateNoteTime → 2026-07-05',

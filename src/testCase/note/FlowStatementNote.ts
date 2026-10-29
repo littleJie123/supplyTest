@@ -140,7 +140,7 @@ export default class extends TestCase {
         check(array) {
           CheckUtil.expectEqual(array.length, 1, '应有1条订单')
           CheckUtil.expectEqual(array[0].status, 'instocked', '订单应改回未结算')
-          CheckUtil.expectEqual(array[0].statementCost, 0, '结算金额应设成 0')
+          CheckUtil.expectEqual(array[0].statementCost == null, true, '结算金额应设成 null')
         }
       }, {
         table: 'noteItem',

@@ -80,8 +80,8 @@ export default class StockUtil {
     if (stockNum == null) {
       return 0;
     }
-    if (stockCnt.buyUnitFee === targetFee.buyUnitFee) {
-      return stockNum;
+    if (Number(stockCnt.buyUnitFee) === Number(targetFee.buyUnitFee)) {
+      return Number(stockNum);
     }
     const calers = [
       new Caler(stockCnt.buyUnitFee, true),
@@ -105,7 +105,7 @@ export default class StockUtil {
   /** 与 StockDomain.isEq 一致 */
   static isEq(cnt: StockCntVo, pojo: StockCntVo): boolean {
     const minStock = this.selectMinBuyUnitFeeStockCnt(cnt, pojo);
-    return this.calCntWithFee(cnt, minStock) === this.calCntWithFee(pojo, minStock);
+    return this.isNumEq(this.calCntWithFee(cnt, minStock), this.calCntWithFee(pojo, minStock));
   }
 
   /** 与 StockDomain.isEqPrice 一致 */

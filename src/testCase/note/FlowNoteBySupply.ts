@@ -335,6 +335,11 @@ export default class extends TestCase {
           for (let row of content) {
             CheckUtil.expectEqualObj(row.purcharse, row.outstock)
             CheckUtil.expectEqualObj(row.purcharse, row.sendCnt)
+            CheckUtil.expectEqual(
+              StockUtil.isEq(row.defCnt, row.statementCnt),
+              true,
+              `${row.name}已结算推荐数量应为结算数量`
+            )
           }
         },
         buildVariable(result) {
@@ -352,7 +357,7 @@ export default class extends TestCase {
             }
           }
         },
-      }),
+      }).setHighlight(),
       new QueryAction({
         name: '查询订单物料',
         url: '/app/noteItem/listNoteItem',
@@ -370,9 +375,14 @@ export default class extends TestCase {
           CheckUtil.expectEqual(price, variable.cntAndPrice.price * 500, `价格不对,期望为${variable.cntAndPrice.price * 500},实际是${price}`)
           for (let row of content) {
             CheckUtil.expectEqualObj(row.purcharse, row.linkOutstockCnt)
+            CheckUtil.expectEqual(
+              StockUtil.isEq(row.defCnt, row.linkSendCnt),
+              true,
+              `${row.name}待入库推荐数量应为关联发货数量`
+            )
           }
         },
-      }),
+      }).setHighlight(),
       new CreateNote3M(),
       new QueryAction({
         name: '查询订单',
@@ -407,8 +417,18 @@ export default class extends TestCase {
           return {
             noteItems: content
           }
+        },
+        check(result) {
+          let content: any[] = result.result.content;
+          for (let row of content) {
+            CheckUtil.expectEqual(
+              StockUtil.isEq(row.defCnt, row.purcharse),
+              true,
+              `${row.name}待接单推荐数量应为订货数量`
+            )
+          }
         }
-      }),
+      }).setHighlight(),
       new Action({
         name: '改价格',
         url: '/app/note/updatePrice',
@@ -418,12 +438,13 @@ export default class extends TestCase {
       }, {
         warehouseType: 'supplierWarehouse',
         parseHttpParam(param) {
-          let noteItems = param.noteItems;
-          noteItems = NoteItemUtil.change(noteItems);
-          for (let item of noteItems) {
-            item.price = item.price * 2
-          }
-          param.noteItems = noteItems
+          let noteItems = NoteItemUtil.change(param.noteItems);
+          // 只改价格。订货数量和 buyUnitFee 不能带回，猪肉 stockBuyUnitFee 为 -10，带回后会把推荐数量换算歪。
+          param.noteItems = noteItems.map(item => ({
+            noteItemId: item.noteItemId,
+            price: item.price * 2,
+            stockBuyUnitFee: item.stockBuyUnitFee
+          }))
           return param;
         },
       }),
@@ -449,6 +470,25 @@ export default class extends TestCase {
       }, {
         warehouseType: 'supplierWarehouse'
       }),
+      new QueryAction({
+        name: '校验待拣货推荐数量',
+        url: '/app/noteItem/listNoteItem',
+        query: {
+          noteId: '${noteId}'
+        }
+      }, {
+        warehouseType: 'supplierWarehouse',
+        check(result) {
+          let content: any[] = result.result.content;
+          for (let row of content) {
+            CheckUtil.expectEqual(
+              StockUtil.isEq(row.defCnt, row.purcharse),
+              true,
+              `${row.name}待拣货推荐数量应为订货数量`
+            )
+          }
+        }
+      }).setHighlight(),
       new ProcessNote({
         action: 'pick',
         noteId: '${noteId}',
@@ -468,6 +508,51 @@ export default class extends TestCase {
       }, {
         warehouseType: 'supplierWarehouse'
       }),
+      new QueryAction({
+        name: '校验待发货推荐数量',
+        url: '/app/noteItem/listNoteItem',
+        query: {
+          noteId: '${noteId}'
+        }
+      }, {
+        warehouseType: 'supplierWarehouse',
+        buildVariable(result) {
+          let content: any[] = result.result.content
+          return {
+            pickedLinkNoteItemId: ArrayUtil.toArray(content, 'linkNoteItemId')
+          }
+        },
+        check(result) {
+          let content: any[] = result.result.content;
+          for (let row of content) {
+            CheckUtil.expectEqual(
+              StockUtil.isEq(row.defCnt, row.pick),
+              true,
+              `${row.name}待发货推荐数量应为拣货数量`
+            )
+          }
+        }
+      }).setHighlight(),
+      new QueryAction({
+        name: '校验餐厅待入库推荐数量取拣货',
+        url: '/app/noteItem/listNoteItem',
+        query: {
+          noteItemId: '${pickedLinkNoteItemId}'
+        }
+      }, {
+        check(result) {
+          let content: any[] = result.result.content;
+          CheckUtil.expectEqual(content.length > 0, true, '餐厅侧应有关联明细')
+          for (let row of content) {
+            CheckUtil.expectEqual(row.linkSendCnt == null, true, `${row.name}未发货不应有关联发货数量`)
+            CheckUtil.expectEqual(
+              StockUtil.isEq(row.defCnt, row.linkPickCnt),
+              true,
+              `${row.name}待入库推荐数量应为关联拣货数量`
+            )
+          }
+        }
+      }).setHighlight(),
       new ProcessNote({
         action: 'send',
         noteId: '${noteId}',
@@ -503,9 +588,14 @@ export default class extends TestCase {
           let content = result.result.content;
           for (let item of content) {
             CheckUtil.expectEqual(item.purcharse.cnt / 2, item.sendCnt.cnt)
+            CheckUtil.expectEqual(
+              StockUtil.isEq(item.defCnt, item.sendCnt),
+              true,
+              `${item.name}待出库推荐数量应为发货数量`
+            )
           }
         }
-      }),
+      }).setHighlight(),
       new ProcessNote({
         action: 'outstock',
         noteId: '${noteId}',
@@ -532,9 +622,19 @@ export default class extends TestCase {
       ... this.buildCheckNoteItem('outstock', {
         checkSupplierItems(item) {
           CheckUtil.expectEqual(item.purcharse.cnt / 2, item.outstock.cnt)
+          CheckUtil.expectEqual(
+            StockUtil.isEq(item.defCnt, item.outstock),
+            true,
+            `${item.name}已出库推荐数量应为出库数量`
+          )
         },
         checkItems(item) {
           CheckUtil.expectEqual(item.purcharse.cnt / 2, item.linkOutstockCnt.cnt)
+          CheckUtil.expectEqual(
+            StockUtil.isEq(item.defCnt, item.linkSendCnt),
+            true,
+            `${item.name}待入库推荐数量应为关联发货数量`
+          )
         },
         targetCol: 'linkOutstockCnt'
       }),
@@ -677,7 +777,8 @@ export default class extends TestCase {
   }
 
   /**
-   * 简略走一遍修改订单物料：供应商发单后是待拣货，改的是订货数量。
+   * 简略走一遍修改订单物料：供应商发单后是待拣货，改的是拣货草稿。
+   * 订货数量和订货金额不变。
    */
   private buildUpdateNoteItem(): BaseTest[] {
     return [
@@ -752,7 +853,7 @@ export default class extends TestCase {
         }
       }),
       new Action({
-        name: '修改订货数量',
+        name: '待拣货改拣货草稿',
         url: '/app/noteItem/updateNoteItem',
         method: 'POST',
         param: {
@@ -786,11 +887,11 @@ export default class extends TestCase {
           let row = result.result.content[0];
           CheckUtil.expectEqual(row.status, 'accept', '发单后应为待拣货');
           CheckUtil.expectEqual(row.materialCnt, 1, '物料款数');
-          CheckUtil.expectEqual(Number(row.cost), 30, '订货金额');
+          CheckUtil.expectEqual(Number(row.cost), 20, '订货金额不变');
         }
       }),
       new QueryAction({
-        name: '校验供应商订货数量',
+        name: '校验供应商拣货草稿',
         url: '/app/noteItem/listNoteItem',
         query: {
           noteId: '${editNoteId}'
@@ -800,17 +901,22 @@ export default class extends TestCase {
         check(result) {
           let row = result.result.content.find(item => item.name == '香肉');
           CheckUtil.expectEqual(
-            StockUtil.isEq(row.purcharse, { cnt: 3, buyUnitFee: 1 }),
+            StockUtil.isEq(row.purcharse, { cnt: 2, buyUnitFee: 1 }),
             true,
-            '订货数量应为3'
+            '订货数量仍为2'
           );
           CheckUtil.expectEqual(
-            StockUtil.isEq(row.pick, { cnt: 0, buyUnitFee: 1 }),
+            StockUtil.isEq(row.pick, { cnt: 3, buyUnitFee: 1 }),
             true,
-            '拣货数量应为0'
+            '拣货草稿应为3'
+          );
+          CheckUtil.expectEqual(
+            StockUtil.isEq(row.defCnt, { cnt: 2, buyUnitFee: 1 }),
+            true,
+            '待拣货时推荐数量仍应为订货数量'
           );
         }
-      })
+      }).setHighlight()
     ];
   }
 
@@ -889,11 +995,27 @@ export default class extends TestCase {
             for (let row of content) {
               checkOpt?.checkSupplierItems(row);
             }
+          } else if (cntCol == null) {
+            for (let row of content) {
+              CheckUtil.expectEqual(
+                StockUtil.isEq(row.defCnt, row.purcharse),
+                true,
+                `${row.name}待接单推荐数量应为订货数量`
+              )
+            }
+          } else if (cntCol == 'outstock') {
+            for (let row of content) {
+              CheckUtil.expectEqual(
+                StockUtil.isEq(row.defCnt, row.outstock),
+                true,
+                `${row.name}已出库推荐数量应为出库数量`
+              )
+            }
           }
         }
 
 
-      }),
+      }).setHighlight(),
 
       new QueryAction({
         name: '验证价格/数量',
@@ -917,7 +1039,7 @@ export default class extends TestCase {
             }
           }
         }
-      })
+      }).setHighlight(checkOpt?.checkItems != null)
 
 
     ]

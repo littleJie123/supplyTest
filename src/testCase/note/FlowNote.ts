@@ -22,6 +22,7 @@ import ProcessNote from "../../action/note/ProcessNote";
 import SplitNote from "../../action/note/SplitNote";
 import Action from "../../action/Action";
 import StockUtil from "../../util/StockUtil";
+import BatchCancelInstockCase from "./BatchCancelInstockCase";
 
 /**
  * 订单流程
@@ -378,6 +379,31 @@ export default class extends TestCase {
         }
       }),
       new QueryAction({
+        name: '校验待入库订单金额',
+        url: '/app/note/listNote',
+        query: {
+          status: 'normal',
+          beginUpdateTime: today,
+          endUpdateTime: today
+        }
+      }, {
+        check(result) {
+          let content: any[] = result.result.content ?? [];
+          CheckUtil.expectFindByArray(content, [
+            { defCnt: 300 },
+            { defCnt: 500 },
+            { defCnt: 806 }
+          ]);
+          for (let row of content) {
+            CheckUtil.expectEqual(
+              Number(row.defCnt),
+              Number(row.cost),
+              `待入库订单${row.noteId}金额应等于订货金额，defCnt=${row.defCnt}，cost=${row.cost}`
+            );
+          }
+        }
+      }).setHighlight(true).setRemark('待入库：defCnt 等于订货金额'),
+      new QueryAction({
         name: '三天前状态时间查不出未入库单',
         url: '/app/note/listNote',
         query: {
@@ -500,6 +526,43 @@ export default class extends TestCase {
         }
       }),
       new QueryAction({
+        name: '校验已结算推荐数量',
+        url: '/app/noteItem/listNoteItem',
+        query: {
+          noteId: '${handNoteId}'
+        }
+      }, {
+        check(result) {
+          let rows: any[] = result.result.content ?? [];
+          CheckUtil.expectEqual(rows.length > 0, true, '已结算手工单应有明细');
+          for (let row of rows) {
+            CheckUtil.expectEqual(
+              StockUtil.isEq(row.defCnt, row.statementCnt),
+              true,
+              `${row.name}已结算推荐数量应为结算数量`
+            );
+          }
+        }
+      }),
+      new QueryAction({
+        name: '校验已结算订单金额',
+        url: '/app/note/listNote',
+        query: {
+          noteId: '${handNoteId}'
+        }
+      }, {
+        check(result) {
+          let row = (result.result.content ?? [])[0];
+          CheckUtil.expectEqual(row != null, true, '应查到已结算手工单');
+          CheckUtil.expectEqual(
+            Number(row.defCnt),
+            Number(row.statementCost),
+            '已结算订单金额应等于结算金额'
+          );
+          CheckUtil.expectEqual(Number(row.defCnt), 300, `已结算订单金额应为300，实际=${row?.defCnt}`);
+        }
+      }).setHighlight(true).setRemark('已结算：defCnt 等于结算金额 300'),
+      new QueryAction({
         name: '按创建时间查出已结算改期单',
         url: '/app/note/listNote',
         query: {
@@ -544,15 +607,18 @@ export default class extends TestCase {
         }
       }),
 
-      ...this.buildUpdateNoteItem()
+      ...this.buildUpdateNoteItem(),
+      new BatchCancelInstockCase()
 
     ]
   }
 
   /**
-   * 简略走一遍修改订单物料：待入库改订货数量，入库后改入库数量。
+   * 简略走一遍修改订单物料：待入库改入库草稿，入库后改对账草稿。
+   * 改价且已入库时，入库金额和库存流水按入库数量重算。
    */
   private buildUpdateNoteItem(): BaseTest[] {
+    let variable = this.getVariable();
     return [
       new Action({
         name: '下单狗肉',
@@ -610,7 +676,7 @@ export default class extends TestCase {
         }
       }),
       new Action({
-        name: '修改订货数量',
+        name: '待入库改入库草稿',
         url: '/app/noteItem/updateNoteItem',
         method: 'POST',
         param: {
@@ -641,11 +707,17 @@ export default class extends TestCase {
         check(result) {
           let row = result.result.content[0];
           CheckUtil.expectEqual(row.materialCnt, 1, '物料款数');
-          CheckUtil.expectEqual(Number(row.cost), 30, '订货金额');
+          CheckUtil.expectEqual(Number(row.cost), 20, '订货金额不变');
+          CheckUtil.expectEqual(Number(row.defCnt), 20, '待入库订单金额仍为订货金额');
+          CheckUtil.expectEqual(
+            Number(row.defCnt),
+            Number(row.cost),
+            '待入库订单金额应等于订货金额'
+          );
         }
-      }),
+      }).setHighlight(true).setRemark('待入库改入库草稿后，defCnt 仍是订货金额 20'),
       new QueryAction({
-        name: '校验订货数量',
+        name: '校验入库草稿',
         url: '/app/noteItem/listNoteItem',
         query: {
           noteId: '${editNoteId}'
@@ -654,9 +726,19 @@ export default class extends TestCase {
         check(result) {
           let row = result.result.content.find(item => item.name == '狗肉');
           CheckUtil.expectEqual(
-            StockUtil.isEq(row.purcharse, { cnt: 3, buyUnitFee: 1 }),
+            StockUtil.isEq(row.purcharse, { cnt: 2, buyUnitFee: 1 }),
             true,
-            '订货数量应为3'
+            '订货数量仍为2'
+          );
+          CheckUtil.expectEqual(
+            StockUtil.isEq(row.instock, { cnt: 3, buyUnitFee: 1 }),
+            true,
+            '入库草稿应为3'
+          );
+          CheckUtil.expectEqual(
+            StockUtil.isEq(row.defCnt, { cnt: 2, buyUnitFee: 1 }),
+            true,
+            '待入库且没有关联发货、拣货时，推荐数量应为订货数量'
           );
         }
       }),
@@ -678,7 +760,7 @@ export default class extends TestCase {
         }
       }),
       new Action({
-        name: '修改入库数量',
+        name: '入库后改对账草稿并改价',
         url: '/app/noteItem/updateNoteItem',
         method: 'POST',
         param: {
@@ -693,14 +775,15 @@ export default class extends TestCase {
           param.datas = {
             update: [{
               noteItemId: item.noteItemId,
-              cnt: { cnt: 4, buyUnitFee: 1 }
+              cnt: { cnt: 4, buyUnitFee: 1 },
+              price: { price: 20, buyUnitFee: 1 }
             }]
           };
           return param;
         }
       }),
       new QueryAction({
-        name: '校验入库修改',
+        name: '校验改价后的入库金额',
         url: '/app/note/listNote',
         query: {
           noteId: '${editNoteId}'
@@ -708,12 +791,18 @@ export default class extends TestCase {
       }, {
         check(result) {
           let row = result.result.content[0];
-          CheckUtil.expectEqual(Number(row.instockCost), 40, '入库金额');
-          CheckUtil.expectEqual(Number(row.cost), 30, '订货金额不变');
+          CheckUtil.expectEqual(Number(row.instockCost), 60, '入库金额按3包新单价');
+          CheckUtil.expectEqual(Number(row.cost), 40, '订货金额按2包新单价');
+          CheckUtil.expectEqual(Number(row.defCnt), 60, '已入库订单金额应为入库金额');
+          CheckUtil.expectEqual(
+            Number(row.defCnt),
+            Number(row.instockCost),
+            '已入库订单金额应等于入库金额'
+          );
         }
-      }),
+      }).setHighlight(true).setRemark('已入库：defCnt 等于入库金额 60，不是订货金额 40'),
       new QueryAction({
-        name: '校验入库数量',
+        name: '校验对账草稿',
         url: '/app/noteItem/listNoteItem',
         query: {
           noteId: '${editNoteId}'
@@ -722,15 +811,59 @@ export default class extends TestCase {
         check(result) {
           let row = result.result.content.find(item => item.name == '狗肉');
           CheckUtil.expectEqual(
-            StockUtil.isEq(row.instock, { cnt: 4, buyUnitFee: 1 }),
+            StockUtil.isEq(row.instock, { cnt: 3, buyUnitFee: 1 }),
             true,
-            '入库数量应为4'
+            '入库数量仍为3'
           );
           CheckUtil.expectEqual(
-            StockUtil.isEq(row.purcharse, { cnt: 3, buyUnitFee: 1 }),
+            StockUtil.isEq(row.statementCnt, { cnt: 4, buyUnitFee: 1 }),
             true,
-            '订货数量仍为3'
+            '对账草稿应为4'
           );
+          CheckUtil.expectEqual(
+            StockUtil.isEq(row.purcharse, { cnt: 2, buyUnitFee: 1 }),
+            true,
+            '订货数量仍为2'
+          );
+          CheckUtil.expectEqual(
+            StockUtil.isEq(row.defCnt, { cnt: 3, buyUnitFee: 1 }),
+            true,
+            '已入库推荐数量应为入库数量'
+          );
+        }
+      }),
+      new Action({
+        name: '校验改价后的入库流水',
+        url: '/free/query',
+        param: {
+          array: [{
+            table: 'stock_record',
+            query: {
+              warehouseId: '${warehouse.warehouseId}',
+              warehouseGroupId: '${warehouse.warehouseGroupId}',
+              isDel: 0,
+              type: 'Instock'
+            }
+          }]
+        }
+      }, {
+        check(result) {
+          let item = (variable.noteItems as any[]).find(row => row.name == '狗肉');
+          let rows: any[] = result.result?.stock_record ?? [];
+          let matched = rows.filter(row => String(row.noteItemId) === String(item.noteItemId));
+          CheckUtil.expectEqual(matched.length, 1, `狗肉入库流水应为1条，实际${matched.length}`);
+          if (matched.length === 0) {
+            return;
+          }
+          CheckUtil.expectEqual(
+            StockUtil.isEq(
+              { cnt: matched[0].cnt ?? 0, buyUnitFee: matched[0].buyUnitFee ?? 1 },
+              { cnt: 3, buyUnitFee: 1 }
+            ),
+            true,
+            '入库流水数量仍为3'
+          );
+          CheckUtil.expectEqual(Number(matched[0].cost), 60, '入库流水金额');
         }
       })
     ];

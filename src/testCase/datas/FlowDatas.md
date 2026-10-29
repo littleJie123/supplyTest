@@ -9,17 +9,17 @@
 5. **餐品 BOM**：红烧牛肉、水煮牛肉，每份各 **1包**（`buyUnitFee=1`），理论价 100元/包。
 6. **7月2日手工入库**：`createHandInstock`，牛肉 **500g / 1000元**（`cnt=500, buyUnitFee=100`，2元/g）。
 7. **7月3日销售**：上传 `excel/datas/sales0703.xlsx`（`target=salesRecord`）再 `saveExcel`。红烧牛肉 **2份** + 水煮牛肉 **1份**、营业日期字符串 **2026/07/03** → 消耗 **3包**。
-8. **7月4日正常入库**：`createNote` → `sendNote` → `processNote`，牛肉 **2包 / 600元**（`buyUnitFee=1`，300元/包）；再 `updateNoteTime` 到 2026-07-04。
+8. **7月4日正常入库**：`createNote` → `sendNote` → `processNote`，牛肉 **2包 / 600元**（`buyUnitFee=1`，300元/包）；再 `updateNoteTime` 到 2026-07-04。发送后、入库前明细 `defCnt` 等于订货数量；入库后明细 `defCnt` 等于入库数量。`listNote.defCnt` 是当前状态的订单金额：待入库等于订货金额 **600**，入库后等于入库金额 **600**。
 9. **7月5日退货**：从 7/4 订单退 **1包（fee1）**，再 `updateNoteTime` 到 2026-07-05。
 10. **7月6日其他消耗（报损）**：`listOtherType` → `saveOtherUse`，牛肉 **1.5包**（`cnt=1.5, buyUnitFee=1`），`createTime=2026-07-06`。
 11. **期末盘点前校验库存**：牛肉 **2包 / 600元**。
 12. **7月31日盘点**：牛肉 **1包**（`buyUnitFee=1`）。
 13. **改价前物料分析**：`/app/state/analysyMaterial`（begin=2026-07-01，end=2026-07-31），校验牛肉行。
-14. **改入库数量和价格**：`listNoteItem` 后调用 `/app/note/updatePrice`，把 7/4 牛肉从 **2包 / 300元** 改为 **3包 / 400元**（`instockCnt=3, price=400, buyUnitFee=1, stockBuyUnitFee=1`）。
+14. **改入库数量和价格**：`listNoteItem` 后调用 `/app/note/updatePrice`，把 7/4 牛肉从 **2包 / 300元** 改为 **3包 / 400元**（`instockCnt=3, price=400, buyUnitFee=1, stockBuyUnitFee=1`）。改价后订货金额 **800**，`listNote.defCnt` 等于入库金额 **1200**。
 15. **改价后重算**：`Recal` 后再打 `analysyMaterial`，校验牛肉行，并对比改价前 `theoryCost` 不变、`cost` 变化。
 16. **进销存**：`/app/state/psi`（begin=2026-07-01，end=2026-07-31），下载 sheet「总计」核对改价后牛肉行与汇总金额。
 17. **记下手工单订单号**：`listNote`（`origin=hand`）。手工单、7/4 订单、退货单的 `title` 都等于自身 `noteId`。
-18. **结算**：`/app/note/statmentNote` 结算三张单，结算金额等于入库金额。手工单 **1000**，7/4 订单 **1200**，退货单 **300**（库存里退货仍是 FIFO 200，结算按订单入库金额）。
+18. **结算**：`/app/note/statmentNote` 结算三张单，结算金额等于入库金额。手工单 **1000**，7/4 订单 **1200**，退货单 **300**（库存里退货仍是 FIFO 200，结算按订单入库金额）。7/4 订单结算后明细 `defCnt` 等于结算数量。`listNote.defCnt` 等于结算金额：手工单 1000、7/4 订单 1200、退货单 300。
 19. **物料统计**：`/app/state/stateByMaterial`。理论 3包/550，实际 5包/1350，入库 7包/2000，出库 6包50克/1650，期初 50克/50，期末 1包/400。
 20. **餐品统计**：`/app/state/stateByProduct`。红烧牛肉销量 2、消耗 2包/350；水煮牛肉销量 1、消耗 1包/200。差异按销售+盘亏 5包/1350 的占比分摊。
 21. **应付款**：`/app/state/stateNote`。供应商1应付 **1900**（1000+1200−300）。供应商 sheet 的订单号是 `title`，退货入库/结算金额为 **-300**。

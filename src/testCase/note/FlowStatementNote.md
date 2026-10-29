@@ -8,7 +8,7 @@
 4. 检查库表：订单 `status=statement`、`statementCost=88`；`noteItem` 的 `statementCnt` 等于 `instockCnt`（10），并记下结算时间和结算人。明细不再断言金额。
 5. `listNoteUpdateHis`：只记整单 `note`（`action=statement`，`remark=结算`，`detail=title`），**不写** noteItem。
 6. `cancelStatmentNote`：取消结算。
-7. 检查库表：订单 `status=instocked`、`statementCost=0`；`noteItem` 的 `statementCnt`、结算时间、结算人为 null。
+7. 检查库表：订单 `status=instocked`、`statementCost` 为 null；`noteItem` 的 `statementCnt`、结算时间、结算人为 null。
 8. `listNoteUpdateHis`：只记整单 `note`（`action=cancelStatement`，`remark=取消结算`），**不写** noteItem。
 
 # 注意点

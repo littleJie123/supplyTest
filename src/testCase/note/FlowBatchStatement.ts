@@ -151,7 +151,7 @@ export default class extends TestCase {
         CheckUtil.expectEqual(cancelled.length, 3, '取消结算的餐厅订单')
         for (let row of cancelled) {
           CheckUtil.expectEqual(row.status, 'instocked', '取消后餐厅状态')
-          CheckUtil.expectEqual(Number(row.statementCost), 0, '取消后餐厅结算金额')
+          CheckUtil.expectEqual(row.statementCost == null, true, '取消后餐厅结算金额应为 null')
           CheckUtil.expectEqual(row.statementTime == null, true, '取消后餐厅结算时间')
           CheckUtil.expectNotNull(row.instockTime, '取消后餐厅入库时间仍在')
         }
@@ -306,7 +306,7 @@ export default class extends TestCase {
           let row = rows.find(item => String(item.noteId) === String(variable[key]))
           CheckUtil.expectNotNull(row, key)
           CheckUtil.expectEqual(row.status, 'outstocked', '取消后供应商状态')
-          CheckUtil.expectEqual(Number(row.statementCost), 0, '取消后供应商结算金额')
+          CheckUtil.expectEqual(row.statementCost == null, true, '取消后供应商结算金额应为 null')
           CheckUtil.expectEqual(row.statementTime == null, true, '取消后供应商结算时间')
           CheckUtil.expectNotNull(row.outstockTime, '取消后出库时间仍在')
         }
