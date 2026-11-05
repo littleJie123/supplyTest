@@ -284,6 +284,7 @@ function checkTime(
 /**
  * 盘点在 3 天前的日终。入库、发货、退货的状态时间改到盘点之前，当前库存回到盘点数量。
  * 创建时间，以及接单、拣货、出库、结算时间，不改变库存。
+ * 传入 instockTime 时忽略 lastUpdateTime，只改订单和明细的入库时间，并把该入库改到盘点之前后重算库存。
  */
 export default class extends TestCase {
   constructor() {
@@ -441,6 +442,39 @@ export default class extends TestCase {
       checkTime('校验结算时间', 'storeNoteId2', 'warehouse', 'statementTime', day10),
       recalStock('重算结算改期库存', 'warehouse'),
       stockStep('结算改期库存不变', 'warehouse', 'materialMap', variable, [
+        { name: '香蕉', cnt: 13 },
+        { name: '苹果', cnt: 10 }
+      ]),
+
+      createOrder('入库香蕉5包苹果2包', [
+        { name: '香蕉', packs: 5 },
+        { name: '苹果', packs: 2 }
+      ], 'instockTimeNoteId'),
+      sendOrder('发送指定入库时间的订单'),
+      processNote('入库指定入库时间的订单', 'instockTimeNoteId', 'instock', 'warehouse', 'purcharse'),
+      recalStock('重算指定入库时间前的库存', 'warehouse'),
+      stockStep('指定入库时间前库存', 'warehouse', 'materialMap', variable, [
+        { name: '香蕉', cnt: 18 },
+        { name: '苹果', cnt: 12 }
+      ]),
+      new Action({
+        name: 'instockTime改到盘点前',
+        url: '/app/note/updateNoteTime',
+        method: 'POST',
+        param: {
+          noteId: '${instockTimeNoteId}',
+          instockTime: beforeInventory,
+          lastUpdateTime: `${day3} 08:00:00`,
+          warehouseId: '${warehouse.warehouseId}',
+          warehouseGroupId: '${warehouse.warehouseGroupId}'
+        }
+      }),
+      checkTime('订单入库时间改为instockTime', 'instockTimeNoteId', 'warehouse', 'instockTime', day10),
+      checkTime('传入instockTime时创建时间不变', 'instockTimeNoteId', 'warehouse', 'createTime', today),
+      checkItemTime('明细入库时间改为instockTime', 'instockTimeNoteId', 'warehouse', 'instockTime', day10),
+      checkItemTime('传入instockTime时明细创建时间不变', 'instockTimeNoteId', 'warehouse', 'createTime', today),
+      recalStock('重算instockTime改期库存', 'warehouse'),
+      stockStep('instockTime改到盘点前的库存', 'warehouse', 'materialMap', variable, [
         { name: '香蕉', cnt: 13 },
         { name: '苹果', cnt: 10 }
       ]),

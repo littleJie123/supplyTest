@@ -12,6 +12,7 @@ import CheckStock from "../../action/CheckStock";
 import CheckArray from "../../action/CheckArray";
 import DelSalesByDay from "../../action/salesRecord/DelSalesByDay";
 import path from "path";
+import { expectSalesCost } from "../../util/expectSalesCost";
 
 /**
  * 按日多次上传销售记录，验证删除再上传后库存与 stockRecord 是否正确。
@@ -120,6 +121,42 @@ export default class extends TestCase {
         }
       ])
     ];
+    if (opt.salesRecordCnt > 0) {
+      ret.push(new Action({
+        name: `${opt.name}·校验cost和副本`,
+        url: '/free/query',
+        param: {
+          array: [
+            {
+              table: 'salesRecord',
+              query: {
+                warehouseId: '${warehouse.warehouseId}',
+                warehouseGroupId: '${warehouse.warehouseGroupId}',
+                isDel: 0
+              }
+            },
+            {
+              table: 'salesRecordBom',
+              query: {
+                warehouseGroupId: '${warehouse.warehouseGroupId}',
+                isDel: 0
+              }
+            }
+          ]
+        }
+      }, {
+        check(result) {
+          let records = result.result?.salesRecord ?? []
+          let copies = result.result?.salesRecordBom ?? []
+          expectSalesCost(records, copies, opt.name)
+          CheckUtil.expectEqual(
+            copies.length,
+            opt.salesStockCnt,
+            `${opt.name}:salesRecordBom 应为${opt.salesStockCnt}行，实际=${copies.length}`
+          )
+        }
+      }).setHighlight())
+    }
     if (opt.checkJuly1SalesRecordZero) {
       ret.push(new CheckArray([{
         table: 'stockRecord',

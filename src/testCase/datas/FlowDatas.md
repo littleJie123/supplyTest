@@ -7,24 +7,25 @@
 3. **设置规格**：`saveBuyUnit` 改为 **1包=100克**（保留「包」为标准单位；按克操作 `buyUnitFee=100`）。
 4. **updateMaterial 设置 stockUnitsId**：规格仍为克+包；`isSupplier` 标在**克**上，`supplierUnitsName=包`。请求带上 `code=MAT_BEEF`（不传会被写成空）。期望物料 `stockUnitsId` 为「包」（`supplierUnitsName` 优先于 `isSupplier`）。随后 `/free/query` 校验：`material.stockUnitsId` 等于单位「包」的 `unitsId`，且不是「克」。
 5. **餐品 BOM**：红烧牛肉、水煮牛肉，每份各 **1包**（`buyUnitFee=1`），理论价 100元/包。
-6. **7月2日手工入库**：`createHandInstock`，牛肉 **500g / 1000元**（`cnt=500, buyUnitFee=100`，2元/g）。
+6. **7月2日手工入库**：`createHandInstock`，牛肉 **500g / 1000元**（`cnt=500, buyUnitFee=100`，2元/g）。`listNote.defTime` 等于 `instockTime`，为 **2026-07-02**。
 7. **7月3日销售**：上传 `excel/datas/sales0703.xlsx`（`target=salesRecord`）再 `saveExcel`。红烧牛肉 **2份** + 水煮牛肉 **1份**、营业日期字符串 **2026/07/03** → 消耗 **3包**。
-8. **7月4日正常入库**：`createNote` → `sendNote` → `processNote`，牛肉 **2包 / 600元**（`buyUnitFee=1`，300元/包）；再 `updateNoteTime` 到 2026-07-04。发送后、入库前明细 `defCnt` 等于订货数量；入库后明细 `defCnt` 等于入库数量。`listNote.defCnt` 是当前状态的订单金额：待入库等于订货金额 **600**，入库后等于入库金额 **600**。
-9. **7月5日退货**：从 7/4 订单退 **1包（fee1）**，再 `updateNoteTime` 到 2026-07-05。
+8. **7月4日正常入库**：`createNote` → `sendNote` → `processNote`，牛肉 **2包 / 600元**（`buyUnitFee=1`，300元/包）；再 `updateNoteTime` 到 2026-07-04。发送后、入库前明细 `defCnt` 等于订货数量；入库后明细 `defCnt` 等于入库数量。`listNote.defCnt` 是当前状态的订单金额：待入库等于订货金额 **600**，入库后等于入库金额 **600**。`listNote.defTime` 已格式化为 `yyyy-MM-dd`：待入库等于 `createTime`，入库后等于 `instockTime` **2026-07-04**。
+9. **7月5日退货**：从 7/4 订单退 **1包（fee1）**，再 `updateNoteTime` 到 2026-07-05。改时间后 `listNote.defTime` 等于 `instockTime`，为 **2026-07-05**。随后用 `beginInstockTime` / `endInstockTime` 筛选：起止都含当天（`end` 为次日零点之前）。7/2 只有手工单，7/4 只有订单，7/5 只有退货单，7/3 为空；7/2~7/4 不含退货，7/4~7/5 不含手工单，7/2~7/5 三张都在。只传 `beginInstockTime=2026-07-05` 只有退货单，只传 `endInstockTime=2026-07-02` 只有手工单。
 10. **7月6日其他消耗（报损）**：`listOtherType` → `saveOtherUse`，牛肉 **1.5包**（`cnt=1.5, buyUnitFee=1`），`createTime=2026-07-06`。
-11. **期末盘点前校验库存**：牛肉 **2包 / 600元**。
+11. **期末盘点前校验库存**：牛肉 **2包 / 600元**。最后一条 `stock_record.afterCost` 为 **600**，且每条牛肉流水的 `afterCost` 等于其 `afterStocks` 金额合计。
 12. **7月31日盘点**：牛肉 **1包**（`buyUnitFee=1`）。
 13. **改价前物料分析**：`/app/state/analysyMaterial`（begin=2026-07-01，end=2026-07-31），校验牛肉行。
-14. **改入库数量和价格**：`listNoteItem` 后调用 `/app/note/updatePrice`，把 7/4 牛肉从 **2包 / 300元** 改为 **3包 / 400元**（`instockCnt=3, price=400, buyUnitFee=1, stockBuyUnitFee=1`）。改价后订货金额 **800**，`listNote.defCnt` 等于入库金额 **1200**。
+14. **改入库数量和价格**：`listNoteItem` 后调用 `/app/note/updatePrice`，把 7/4 牛肉从 **2包 / 300元** 改为 **3包 / 400元**（`instockCnt=3, price=400, buyUnitFee=1, stockBuyUnitFee=1`）。改价后订货金额 **800**，`listNote.defCnt` 等于入库金额 **1200**，`defTime` 仍是 **2026-07-04**。
 15. **改价后重算**：`Recal` 后再打 `analysyMaterial`，校验牛肉行，并对比改价前 `theoryCost` 不变、`cost` 变化。
 16. **进销存**：`/app/state/psi`（begin=2026-07-01，end=2026-07-31），下载 sheet「总计」核对改价后牛肉行与汇总金额。
 17. **记下手工单订单号**：`listNote`（`origin=hand`）。手工单、7/4 订单、退货单的 `title` 都等于自身 `noteId`。
-18. **结算**：`/app/note/statmentNote` 结算三张单，结算金额等于入库金额。手工单 **1000**，7/4 订单 **1200**，退货单 **300**（库存里退货仍是 FIFO 200，结算按订单入库金额）。7/4 订单结算后明细 `defCnt` 等于结算数量。`listNote.defCnt` 等于结算金额：手工单 1000、7/4 订单 1200、退货单 300。
+18. **结算**：`/app/note/statmentNote` 结算三张单，结算金额等于入库金额。手工单 **1000**，7/4 订单 **1200**，退货单 **300**（库存里退货仍是 FIFO 200，结算按订单入库金额）。7/4 订单结算后明细 `defCnt` 等于结算数量。`listNote.defCnt` 等于结算金额：手工单 1000、7/4 订单 1200、退货单 300。`defTime` 等于各自的 `statementTime`。
 19. **物料统计**：`/app/state/stateByMaterial`。理论 3包/550，实际 5包/1350，入库 7包/2000，出库 6包50克/1650，期初 50克/50，期末 1包/400。
 20. **餐品统计**：`/app/state/stateByProduct`。红烧牛肉销量 2、消耗 2包/350；水煮牛肉销量 1、消耗 1包/200。差异按销售+盘亏 5包/1350 的占比分摊。
 21. **应付款**：`/app/state/stateNote`。供应商1应付 **1900**（1000+1200−300）。供应商 sheet 的订单号是 `title`，退货入库/结算金额为 **-300**。
 22. **按供应商导订单**：`/app/note/downloadBySupplier`。三张都是已对账，订单号是 `title`。汇总订货 1500、入库 1900、结算 1900。手工 5包/1000；7/4 订货仍 2包/800、入库 3包/1200；退货订货/入库/结算数量和金额为 -1 / -300。
 23. **下载订单**：`/app/note/downloadNotes` 分别下载手工单、7/4 订单、退货单。订单一览的订单号等于 `title`，并且存在以 `title` 命名的 sheet。退货单在这里金额不取负（订货/入库都是 300）。
+24. **删除批量途径订单**：报表之后另下一单牛肉 1 包，`sendNote` → `batchProcessNote` 入库并校验操作人、金额。然后 `/app/note/delNote` 删除该单。`/free/query` 按 `noteId` 查 `noteItem`（不带 `isDel`），明细仍在且 `isDel=1`。
 
 # 注意点
 - 6 月没有 31 日，第一次盘点用 **2026-06-30**。必须在改规格之前，此时物料只有「包」。
@@ -37,7 +38,7 @@
 - **updatePrice 放在期末盘点之后**：`analysyMaterial` 只统计 `sales` + `inventory`，入库/退货/报损本身不进该接口。只有改完量价后重算期末盘亏，前后两次分析才会不同。接口会从 7/4 起重算后续流水（含 7/5 退货、7/6 报损、7/31 盘点）。
 - 改价后 FIFO：退货仍扣 7/2 的 1包/200，报损再扣 7/2 剩余 1.5包/300；盘点前库存 3包/1200（仅 7/4）；7/31 按最新批次 400元/包回填 → 1包 / 400元，盘亏 2包 / 800元。
 - 改订单/退货单时间用 `/app/note/updateNoteTime`，不要用 `/free/update`。报损日期用 `saveOtherUse` 的 `createTime`。
-- 只在 7/31 盘点前校验一次库存（Recal + CheckStock + 金额）：报损后 **2包 / 600元**。
+- 只在 7/31 盘点前校验一次库存（Recal + CheckStock + 金额 + afterCost）：报损后 **2包 / 600元**。最后一条流水 `afterCost=600`，每条 `afterCost` 等于 `afterStocks` 的 cost 合计。
 - `analysyMaterial` 只读 `sales` + `inventory` 的 `costOfChange*-1`（入库/退货/报损不进）。分析区间 begin=7/01、end=7/31，6/30 盘点流水在区间外故无期初盘点，但销售 FIFO 仍扣该批次；7/31 为期末，中间无盘点。
   - 7/3 销售 3包 FIFO：6/30 的 0.5包/50 + 7/2 的 2.5包/500 = **550**
   - 7/2 共 5包/1000：销售扣 2.5包、退货扣 1包、报损扣剩余 1.5包（退货/报损不进接口）→ 计入接口的是 2.5包/500
@@ -49,3 +50,4 @@
 - 结算放在记下 `title` 之后、下载之前。`statmentNote` 的 `statementCost` 用入库金额；明细 `statementCnt` 会被写成入库数量。退货单提交的是正数 300，应付款和按供应商导出里再取负。
 - `downloadBySupplier` 的订单号是 `title`。退货行数量和金额为负。`downloadNotes` 的订单一览不把退货金额取负。7/4 改价后订货数量仍是 2包（金额 2×400=800），入库数量是 3包/1200。
 - 不下载结算单：`/app/bill/downBill`、`/app/bill/dowloadBySupplier`。
+- 删除的是报表之后另下的那张批量入库单，不改前面已经校验过的库存和报表。删除后明细做逻辑删除（`isDel=1`），用 `/free/query` 按 `noteId` 仍能查到。

@@ -28,12 +28,63 @@ function readVar(variable: any, path: string): any {
   return cur
 }
 
+/** afterStocks 各批次 cost 合计，保留 2 位，与 afterCost 对齐 */
+function sumAfterStocksCost(afterStocks: any): number {
+  let raw = afterStocks
+  if (raw == null || raw === '' || String(raw).toLowerCase() === 'null') {
+    return 0
+  }
+  if (typeof raw === 'string') {
+    raw = JSON.parse(raw)
+  }
+  let sum = 0
+  for (let row of raw?.array ?? []) {
+    sum += Number(row?.cost ?? 0)
+  }
+  return Math.round(sum * 100) / 100
+}
+
+/** 按业务日期、流水 id 取最后一条 */
+function pickLastStockRecord(rows: any[]): any {
+  let last = rows[0]
+  for (let row of rows) {
+    let date = Number(row.bussinessDate ?? 0)
+    let lastDate = Number(last.bussinessDate ?? 0)
+    if (date > lastDate || (date === lastDate && Number(row.stockRecordId) > Number(last.stockRecordId))) {
+      last = row
+    }
+  }
+  return last
+}
+
 /** 取日期字符串的 yyyy-MM-dd */
 function dayOf(value: any): string {
   if (value == null) {
     return ''
   }
   return String(value).substring(0, 10)
+}
+
+/** 断言 listNote 当前状态的订单时间，并等于对应时间列。defTime 已格式化为 yyyy-MM-dd */
+function expectDefTime(row: any, field: string, expectedDay: string | null, label: string) {
+  CheckUtil.expectEqual(row != null, true, `${label}应能查到订单`)
+  CheckUtil.expectEqual(
+    row?.defTime != null && row.defTime !== '',
+    true,
+    `${label} defTime 不应为空，实际=${row?.defTime}`
+  )
+  CheckUtil.expectEqual(
+    String(row.defTime),
+    String(row[field]),
+    `${label} defTime 应等于${field}，defTime=${row?.defTime}，${field}=${row?.[field]}`
+  )
+  if (expectedDay != null) {
+    CheckUtil.expectEqual(
+      dayOf(row.defTime),
+      expectedDay,
+      `${label} defTime 应为${expectedDay}，实际=${row?.defTime}`
+    )
+  }
 }
 
 /** 断言 listNote 当前状态的订单金额，并等于对应金额列 */
@@ -78,6 +129,62 @@ function checkInstockOp(rows: any[], usersId: any, expectDay: string | null, lab
       `${label} ${row.name}已入库推荐数量应为入库数量`
     )
   }
+}
+
+/** 断言 noteItem 的入库/出库/结算金额。空表示该数量还没写过。 */
+function expectItemStatusCost(
+  rows: any[],
+  expect: { instockCost?: number | null; outstockCost?: number | null; statementCost?: number | null },
+  label: string
+) {
+  CheckUtil.expectEqual(rows.length > 0, true, `${label}应有明细`)
+  for (let row of rows) {
+    for (let col of ['instockCost', 'outstockCost', 'statementCost'] as const) {
+      let expected = expect[col]
+      let actual = row?.[col]
+      if (expected == null) {
+        CheckUtil.expectEqual(
+          actual == null || actual === '',
+          true,
+          `${label} ${row?.name ?? row?.noteItemId} ${col} 应为空，实际=${actual}`
+        )
+      } else {
+        CheckUtil.expectEqual(
+          Number(actual),
+          expected,
+          `${label} ${row?.name ?? row?.noteItemId} ${col} 应为${expected}，实际=${actual}`
+        )
+      }
+    }
+  }
+}
+
+function buildItemCostCheck(
+  name: string,
+  noteId: string,
+  expect: { instockCost?: number | null; outstockCost?: number | null; statementCost?: number | null },
+  label: string
+): BaseTest {
+  return new QueryAction({
+    name,
+    url: '/app/noteItem/listNoteItem',
+    query: { noteId }
+  }, {
+    check(result) {
+      expectItemStatusCost(result.result.content ?? [], expect, label)
+    }
+  }).setRemark(`${label}：校验 instockCost、outstockCost、statementCost`)
+}
+
+/** 断言 listNote 返回的订单号与期望一致（忽略顺序） */
+function expectInstockNoteIds(content: any[], ids: any[], label: string) {
+  let actual = (content ?? []).map((row: any) => String(row.noteId)).sort()
+  let expected = ids.map((id) => String(id)).sort()
+  CheckUtil.expectEqual(
+    actual.join(','),
+    expected.join(','),
+    `${label} 订单应为[${expected.join(',')}]，实际=[${actual.join(',')}]`
+  )
 }
 
 /**
@@ -196,6 +303,7 @@ export default class extends TestCase {
             '2026-07-02',
             `手工入库订单 instockTime 应为2026-07-02，实际=${row?.instockTime}`
           )
+          expectDefTime(row, 'instockTime', '2026-07-02', '手工入库')
         },
         buildVariable(result) {
           let row = (result.result.content ?? []).find((item: any) => item.origin == 'hand')
@@ -211,6 +319,11 @@ export default class extends TestCase {
           checkInstockOp(result.result.content ?? [], variable.usersId, '2026-07-02', '手工入库')
         }
       }).setRemark('手工入库：校验 instockUser=当前用户，instockTime=2026-07-02'),
+      buildItemCostCheck('校验手工入库明细金额', '${handNoteIdForOp}', {
+        instockCost: 1000,
+        outstockCost: null,
+        statementCost: null
+      }, '手工入库'),
 
       new UploadSalesJuly3(),
 
@@ -218,10 +331,12 @@ export default class extends TestCase {
 
       new BackJuly5(),
 
+      new CheckInstockTimeFilter().setHighlight(),
+
       new OtherUseJuly6(),
 
       ...this.buildVerifyStock({
-        remark: '期末盘点前校验：2包/600元（7/6报损FIFO扣7/2剩余1.5包/300）',
+        remark: '期末盘点前校验：2包/600元，最后一条流水afterCost=600',
         name: '校验7月31日盘点前库存',
         cnt: 2,
         buyUnitFee: 1,
@@ -358,8 +473,47 @@ export default class extends TestCase {
             true,
             `批量途径订单 instockTime 不应为空，实际=${row?.instockTime}`
           )
+          expectDefTime(row, 'instockTime', null, '批量途径')
         }
-      }).setRemark('批量途径：订单 instockTime 已写入')
+      }).setRemark('批量途径：订单 instockTime 已写入，defTime 等于 instockTime'),
+      buildItemCostCheck('校验批量入库明细金额', '${batchOpNote.noteId}', {
+        instockCost: 100,
+        outstockCost: null,
+        statementCost: null
+      }, '批量入库'),
+      new Action({
+        name: '删除批量途径订单',
+        remark: '逻辑删除该订单，对应 noteItem 应 isDel=1',
+        url: '/app/note/delNote',
+        param: {
+          noteId: '${batchOpNote.noteId}'
+        }
+      }),
+      new Action({
+        name: '校验批量途径明细已删除',
+        remark: 'free/query 不带 isDel，本单 noteItem 应全部 isDel=1',
+        url: '/free/query',
+        param: {
+          array: [{
+            table: 'noteItem',
+            query: {
+              noteId: '${batchOpNote.noteId}'
+            }
+          }]
+        }
+      }, {
+        check(result) {
+          let rows: any[] = result.result?.noteItem ?? []
+          CheckUtil.expectEqual(rows.length > 0, true, '删除的订单应仍能查到明细')
+          for (let row of rows) {
+            CheckUtil.expectEqual(
+              Number(row.isDel),
+              1,
+              `noteItemId=${row.noteItemId} 应已逻辑删除，isDel=${row.isDel}`
+            )
+          }
+        }
+      })
     ]
   }
 
@@ -516,8 +670,11 @@ export default class extends TestCase {
           expectDefCnt(find(variable.handNoteId), 'statementCost', 1000, '手工单已结算')
           expectDefCnt(find(variable.note?.noteId), 'statementCost', 1200, '7/4订单已结算')
           expectDefCnt(find(variable.backNoteId), 'statementCost', 300, '退货单已结算')
+          expectDefTime(find(variable.handNoteId), 'statementTime', null, '手工单已结算')
+          expectDefTime(find(variable.note?.noteId), 'statementTime', null, '7/4订单已结算')
+          expectDefTime(find(variable.backNoteId), 'statementTime', null, '退货单已结算')
         }
-      }).setHighlight(true).setRemark('已结算：defCnt 等于结算金额。手工单1000，7/4订单1200，退货单300'),
+      }).setRemark('已结算：defCnt 等于结算金额，defTime 等于 statementTime。手工单1000，7/4订单1200，退货单300'),
 
       this.buildStateByMaterialCheck(),
       this.buildStateByProductCheck(),
@@ -926,7 +1083,28 @@ export default class extends TestCase {
               CheckUtil.expectEqual(stock != null, true, '牛肉库存不存在')
               CheckUtil.expectEqual(stock.cost, opt.cost, `牛肉库存金额应为${opt.cost}`)
             }
-          }]).setRemark(`${opt.remark}·校验金额`)
+          }, {
+            table: 'stock_record',
+            check(array) {
+              let materialId = variable.materialMap?.牛肉?.materialId
+              let rows = (array ?? []).filter((row: any) => String(row.materialId) === String(materialId))
+              CheckUtil.expectEqual(rows.length > 0, true, '牛肉库存流水不存在')
+              let last = pickLastStockRecord(rows)
+              CheckUtil.expectEqual(
+                Number(last.afterCost),
+                opt.cost,
+                `牛肉最后一条流水afterCost应为${opt.cost}，实际=${last.afterCost}`
+              )
+              for (let row of rows) {
+                let sum = sumAfterStocksCost(row.afterStocks)
+                CheckUtil.expectEqual(
+                  Number(row.afterCost),
+                  sum,
+                  `stockRecordId=${row.stockRecordId} afterCost应等于afterStocks金额${sum}，实际=${row.afterCost}`
+                )
+              }
+            }
+          }]).setRemark(`${opt.remark}·校验金额和afterCost`)
         ]
       })
     ]
@@ -964,7 +1142,23 @@ class StatementJulyNotes extends TestCase {
             )
           }
         }
-      }).setRemark('已结算：defCnt 等于结算数量')    ]
+      }).setRemark('已结算：defCnt 等于结算数量'),
+      buildItemCostCheck('校验手工单明细金额', '${handNoteId}', {
+        instockCost: 1000,
+        outstockCost: null,
+        statementCost: 1000
+      }, '手工单已结算'),
+      buildItemCostCheck('校验7/4订单明细金额', '${note.noteId}', {
+        instockCost: 1200,
+        outstockCost: null,
+        statementCost: 1200
+      }, '7/4订单已结算'),
+      buildItemCostCheck('校验退货单明细金额', '${backNoteId}', {
+        instockCost: 300,
+        outstockCost: null,
+        statementCost: 300
+      }, '退货单已结算')
+    ]
   }
 
   private buildOne(name: string, noteId: string, statementCost: number): BaseTest {
@@ -1200,8 +1394,9 @@ class OrderInstockJuly4 extends TestCase {
         check(result) {
           let row = (result.result.content ?? [])[0]
           expectDefCnt(row, 'cost', 600, '待入库')
+          expectDefTime(row, 'createTime', null, '待入库')
         }
-      }).setHighlight(true).setRemark('待入库：订单金额 defCnt 等于订货金额 600'),
+      }).setRemark('待入库：defCnt 等于订货金额 600，defTime 等于 createTime'),
       new ListNoteGroup({
         groupType: 'NoteDay',
         status: 'normal'
@@ -1264,8 +1459,9 @@ class OrderInstockJuly4 extends TestCase {
             true,
             `物料途径订单 instockTime 不应为空，实际=${row?.instockTime}`
           )
+          expectDefTime(row, 'instockTime', '2026-07-04', '物料途径已入库')
         }
-      }).setRemark('物料途径：订单 instockTime 已写入'),
+      }).setRemark('物料途径：instockTime 与 defTime 都是 2026-07-04'),
       new QueryAction({
         name: '校验已入库订单金额',
         url: '/app/note/listNote',
@@ -1274,8 +1470,14 @@ class OrderInstockJuly4 extends TestCase {
         check(result) {
           let row = (result.result.content ?? [])[0]
           expectDefCnt(row, 'instockCost', 600, '已入库')
+          expectDefTime(row, 'instockTime', '2026-07-04', '已入库')
         }
-      }).setHighlight(true).setRemark('已入库：订单金额 defCnt 等于入库金额 600')
+      }).setRemark('已入库：defCnt 等于入库金额 600，defTime 等于 instockTime 2026-07-04'),
+      buildItemCostCheck('校验7/4入库明细金额', '${note.noteId}', {
+        instockCost: 600,
+        outstockCost: null,
+        statementCost: null
+      }, '7/4已入库')
     ]
   }
 }
@@ -1330,8 +1532,14 @@ class UpdatePriceJuly4 extends TestCase {
           let row = (result.result.content ?? [])[0]
           CheckUtil.expectEqual(Number(row?.cost), 800, `改价后订货金额应为800，实际=${row?.cost}`)
           expectDefCnt(row, 'instockCost', 1200, '改价后已入库')
+          expectDefTime(row, 'instockTime', '2026-07-04', '改价后已入库')
         }
-      }).setHighlight(true).setRemark('已入库改价后：defCnt 等于入库金额 1200，不是订货金额 800')
+      }).setRemark('已入库改价后：defCnt 等于入库金额 1200，defTime 仍是 2026-07-04'),
+      buildItemCostCheck('校验改价后明细金额', '${note.noteId}', {
+        instockCost: 1200,
+        outstockCost: null,
+        statementCost: null
+      }, '7/4改价后')
     ]
   }
 }
@@ -1448,6 +1656,7 @@ class BackJuly5 extends TestCase {
           let row = result.result.content?.[0]
           CheckUtil.expectEqual(row != null, true, '应查到退货单')
           CheckUtil.expectEqual(String(row.title), String(row.noteId), `退货单title应等于订单号，title=${row?.title}，noteId=${row?.noteId}`)
+          expectDefTime(row, 'instockTime', null, '退货单创建')
         },
         buildVariable(result) {
           let row = result.result.content[0]
@@ -1481,7 +1690,124 @@ class BackJuly5 extends TestCase {
           warehouseId: '${warehouse.warehouseId}',
           warehouseGroupId: '${warehouse.warehouseGroupId}'
         }
-      })
+      }),
+      new QueryAction({
+        name: '校验退货单时间',
+        url: '/app/note/listNote',
+        query: { noteId: '${backNoteId}' }
+      }, {
+        check(result) {
+          let row = (result.result.content ?? [])[0]
+          expectDefTime(row, 'instockTime', '2026-07-05', '退货单')
+        }
+      }).setRemark('退货单 defTime 等于 instockTime，为 2026-07-05'),
+      buildItemCostCheck('校验退货明细金额', '${backNoteId}', {
+        instockCost: 300,
+        outstockCost: null,
+        statementCost: null
+      }, '退货已入库')
+    ]
+  }
+}
+
+/**
+ * listNote 按入库时间筛选。
+ * beginInstockTime：instockTime >= 当天；endInstockTime：instockTime < 次日。
+ * 此时只有三张已入库单：手工单 2026-07-02、7/4 订单、退货单 2026-07-05。
+ */
+class CheckInstockTimeFilter extends TestCase {
+  constructor() {
+    super({ remark: 'listNote 按 beginInstockTime / endInstockTime 筛选入库日' })
+  }
+
+  getName(): string {
+    return '按入库时间筛选订单'
+  }
+
+  protected buildActions(): BaseTest[] {
+    let variable = this.getVariable()
+    let query = (name: string, begin: string | null, end: string | null, ids: () => any[], remark: string) => {
+      let param: any = {}
+      if (begin != null) {
+        param.beginInstockTime = begin
+      }
+      if (end != null) {
+        param.endInstockTime = end
+      }
+      return new QueryAction({
+        name,
+        url: '/app/note/listNote',
+        query: param
+      }, {
+        check(result) {
+          expectInstockNoteIds(result.result.content ?? [], ids(), name)
+        }
+      }).setRemark(remark)
+    }
+    return [
+      query(
+        '入库日7月2日',
+        '2026-07-02',
+        '2026-07-02',
+        () => [variable.handNoteIdForOp],
+        '起止都是 2026-07-02，只有手工单'
+      ),
+      query(
+        '入库日7月4日',
+        '2026-07-04',
+        '2026-07-04',
+        () => [variable.note?.noteId],
+        '起止都是 2026-07-04，只有订单；不含 7/2 手工单和 7/5 退货单'
+      ),
+      query(
+        '入库日7月5日',
+        '2026-07-05',
+        '2026-07-05',
+        () => [variable.backNoteId],
+        '起止都是 2026-07-05，只有退货单'
+      ),
+      query(
+        '入库日7月3日为空',
+        '2026-07-03',
+        '2026-07-03',
+        () => [],
+        '7/3 没有入库单'
+      ),
+      query(
+        '7月2日到7月4日',
+        '2026-07-02',
+        '2026-07-04',
+        () => [variable.handNoteIdForOp, variable.note?.noteId],
+        '含手工单和 7/4 订单，不含 7/5 退货单'
+      ),
+      query(
+        '7月4日到7月5日',
+        '2026-07-04',
+        '2026-07-05',
+        () => [variable.note?.noteId, variable.backNoteId],
+        '含 7/4 订单和退货单，不含 7/2 手工单'
+      ),
+      query(
+        '7月2日到7月5日',
+        '2026-07-02',
+        '2026-07-05',
+        () => [variable.handNoteIdForOp, variable.note?.noteId, variable.backNoteId],
+        '三张已入库单都在范围内'
+      ),
+      query(
+        '仅开始日7月5日',
+        '2026-07-05',
+        null,
+        () => [variable.backNoteId],
+        '只传 beginInstockTime，7/5 及之后只有退货单'
+      ),
+      query(
+        '仅结束日7月2日',
+        null,
+        '2026-07-02',
+        () => [variable.handNoteIdForOp],
+        '只传 endInstockTime，7/2 及之前只有手工单'
+      )
     ]
   }
 }

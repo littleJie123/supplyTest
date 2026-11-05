@@ -1,4 +1,5 @@
 import { BaseTest, CheckUtil, TestCase } from "testflow";
+import { expectSalesCost } from "../../util/expectSalesCost";
 import SaveMaterial from "../../action/material/SaveMaterial";
 import ChangeWarehouse from "../../action/user/ChangeWarehouse";
 import FindLastUserId from "../../action/user/FindLastUserId";
@@ -7,6 +8,7 @@ import AddWarehouse from "../../action/warehouse/AddWarehouse";
 import Upload from "../../action/Upload";
 import path from "path";
 import Action from "../../action/Action";
+import ExcelUploadUtil from "../../util/ExcelUploadUtil";
 
 export default class extends TestCase {
   protected buildActions(): BaseTest[] {
@@ -18,33 +20,9 @@ export default class extends TestCase {
 
     ]
 
-    ret.push(new Upload({
-      name: '上传物料',
-      param: {
-        target: 'material',
-        warehouseId: '${warehouse.warehouseId}',
-      },
-      filePath: this.getFile('物料')
-    }))
-
-    ret.push(new Upload({
-      name: '上传bom',
-      param: {
-        target: 'bom',
-        warehouseId: '${warehouse.warehouseId}',
-      },
-      filePath: this.getFile('bom')
-    }))
-
-
-    ret.push(new Upload({
-      name: '上传销售记录',
-      param: {
-        target: 'salesRecord',
-        warehouseId: '${warehouse.warehouseId}',
-      },
-      filePath: this.getFile('销售记录')
-    }))
+    ret.push(...this.buildUpload('上传物料', 'material', '物料'))
+    ret.push(...this.buildUpload('上传bom', 'bom', 'bom'))
+    ret.push(...this.buildUpload('上传销售记录', 'salesRecord', '销售记录'))
 
     ret.push(new Action({
       name: '查询销售记录',
@@ -59,14 +37,7 @@ export default class extends TestCase {
       }
     }))
 
-    ret.push(new Upload({
-      name: '上传销售记录[错误]',
-      param: {
-        target: 'salesRecord',
-        warehouseId: '${warehouse.warehouseId}',
-      },
-      filePath: this.getFile('销售记录[错误]')
-    }))
+    ret.push(...this.buildUpload('上传销售记录[错误]', 'salesRecord', '销售记录[错误]'))
 
     ret.push(new Action({
       name: '查询销售记录',
@@ -83,6 +54,34 @@ export default class extends TestCase {
       }
     }))
 
+    ret.push(new Action({
+      name: '校验cost、noBom和salesRecordBom',
+      url: '/free/query',
+      param: {
+        array: [
+          {
+            table: 'salesRecord',
+            query: {
+              warehouseId: '${warehouse.warehouseId}',
+              warehouseGroupId: '${warehouse.warehouseGroupId}',
+              isDel: 0
+            }
+          },
+          {
+            table: 'salesRecordBom',
+            query: {
+              warehouseGroupId: '${warehouse.warehouseGroupId}',
+              isDel: 0
+            }
+          }
+        ]
+      }
+    }, {
+      check(result) {
+        expectSalesCost(result.result?.salesRecord ?? [], result.result?.salesRecordBom ?? [], '上传销售记录')
+      }
+    }).setHighlight())
+
 
     return ret;
   }
@@ -90,12 +89,50 @@ export default class extends TestCase {
     return '销售记录';
   }
 
+  /**
+   * 列能自动匹配时上传即导入；匹配不上时再 saveExcel。
+   */
+  private buildUpload(name: string, target: string, fileName: string): BaseTest[] {
+    return [
+      new Upload({
+        name,
+        param: {
+          target,
+          warehouseId: '${warehouse.warehouseId}'
+        },
+        filePath: this.getFile(fileName)
+      }, {
+        buildVariable(result) {
+          let data = result.result ?? {}
+          return {
+            excelFileId: data.excelFileId,
+            fileCols: ExcelUploadUtil.buildSaveFileCols(data.fileCols),
+            allMap: !!data.allMap
+          }
+        }
+      }),
+      new Action({
+        name: `保存${name}`,
+        url: '/app/excel/saveExcel',
+        param: {
+          excelFileId: '${excelFileId}',
+          fileCols: '${fileCols}',
+          warehouseId: '${warehouse.warehouseId}'
+        }
+      }, {
+        needRunVariable: {
+          key: 'allMap',
+          not: true
+        }
+      })
+    ]
+  }
+
   protected getFile(strPath: string): string {
     if (!strPath.endsWith('.xlsx')) {
       strPath += '.xlsx'
     }
-    let dir = path.join(__dirname, '../../../excel/', strPath)
-    return dir;
+    return path.join(__dirname, '../../../excel/FlowSalesRecord/', strPath)
   }
 
 }
