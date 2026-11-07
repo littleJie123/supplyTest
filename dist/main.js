@@ -12,6 +12,9 @@ runner.regEnvConfig('local', {
 runner.regEnvConfig('test', {
     host: 'https://test.chaifeng.cc/'
 });
+runner.regEnvConfig('product', {
+    host: 'https://www.chaifeng.cc/'
+});
 runner.setHeadProcess({
     processHeader(header) {
         header.token = '${token}';
