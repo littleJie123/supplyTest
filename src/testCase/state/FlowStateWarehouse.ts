@@ -185,6 +185,10 @@ export default class extends TestCase {
           {
             name: '洋葱', category: '蔬菜', unit: '斤', code: 'MAT_ONION',
             suppliers: [{ isDef: true, supplierId: '${supplierMap.供应商1}', price: 10 }]
+          },
+          {
+            name: '无单价', category: '蔬菜', unit: '个', code: 'MAT_NOPRICE',
+            suppliers: [{ isDef: true, supplierId: '${supplierMap.供应商1}', price: 0 }]
           }
         ]
       }),
@@ -217,6 +221,9 @@ export default class extends TestCase {
         { name: '克', fee: 1 },
         { name: '斤', fee: 500, isSupplier: true }
       ], '斤'),
+      this.saveBuyUnit('无单价', [
+        { name: '个', fee: 1, isSupplier: true }
+      ], '个'),
       new ListMaterial(),
 
       ...this.saveProduct('羊肉炒白菜', [
@@ -782,12 +789,30 @@ export default class extends TestCase {
       }),
       ...this.onionProducts(),
       this.checkSalesRecordPeriod(),
+      ...this.checkGroupSalesRecord(),
       this.checkAllProductAmount(),
       this.checkBeefProductAmount(),
       this.checkMaterialExcel(),
       this.checkProductExcel(),
       this.checkPsiExcel(),
-      ...this.checkStoreNoteTime()
+      this.checkStockRecordCost('流水金额9月', '2026-09-01', '2026-09-30', {
+        Instock: 16796,
+        Back: 350,
+        otherInstock: 240,
+        sales: 8118,
+        otherUse: 700,
+        Inventory: -13660
+      }),
+      this.checkStockRecordCost('流水金额9月1日到9月5日', '2026-09-01', '2026-09-05', {
+        Instock: 16680,
+        Back: 350,
+        sales: 8090
+      }),
+      ...this.checkOtherUsePeriod(),
+      ...this.checkStoreNoteTime(),
+      ...this.checkNoPrice(),
+      ...this.checkListNoCost(),
+      ...this.checkNoBomProduct()
     ]
   }
 
@@ -850,6 +875,58 @@ export default class extends TestCase {
         }
         let early = content.find(item => String(item?.salesDate ?? '').substring(0, 10) < '2026-09-09')
         CheckUtil.expectEqual(early == null, true, `不应查出9月9日之前的销售，实际${early?.product?.name}`)
+      }
+    })
+  }
+
+  /**
+   * 按餐品汇总销量。9月3日五笔、9月9日两笔。清炒萝卜成本是 0。
+   * 9月4日到9月8日没有销售。
+   */
+  private checkGroupSalesRecord(): Action[] {
+    let sep3 = [
+      { name: '羊肉炒白菜', cnt: 100, cost: 1520 },
+      { name: '红烧牛肉', cnt: 80, cost: 5760 },
+      { name: '萝卜煮羊肉', cnt: 60, cost: 2448 },
+      { name: '番茄炒蛋', cnt: 10, cost: 440 },
+      { name: '清炒萝卜', cnt: 20, cost: 0 }
+    ]
+    let sep9 = [
+      { name: '洋葱按斤', cnt: 2, cost: 20 },
+      { name: '洋葱按克', cnt: 4, cost: 8 }
+    ]
+    return [
+      this.groupSales('销售汇总9月', '2026-09-01', '2026-09-30', sep3.concat(sep9)),
+      this.groupSales('销售汇总9月3日', '2026-09-03', '2026-09-03', sep3),
+      this.groupSales('销售汇总9月4日到9月8日', '2026-09-04', '2026-09-08', []),
+      this.groupSales('销售汇总9月9日', '2026-09-09', '2026-09-09', sep9)
+    ]
+  }
+
+  private groupSales(name: string, begin: string, end: string, expects: Array<{
+    name: string
+    cnt: number
+    cost: number
+  }>): Action {
+    return new Action({
+      name,
+      url: '/app/salesRecord/groupSalesRecord',
+      param: {
+        warehouseId: '${warehouse.warehouseId}',
+        begin,
+        end,
+        pageSize: 20
+      }
+    }, {
+      check(result) {
+        let content: any[] = result.result?.content ?? []
+        CheckUtil.expectEqual(content.length, expects.length, `${name}应为${expects.length}个餐品，实际${content.length}`)
+        for (let expectRow of expects) {
+          let row = content.find(item => item?.product?.name == expectRow.name)
+          CheckUtil.expectEqual(row != null, true, `${name}缺少${expectRow.name}`)
+          CheckUtil.expectEqual(Number(row?.cnt), expectRow.cnt, `${expectRow.name}销量应为${expectRow.cnt}，实际${row?.cnt}`)
+          CheckUtil.expectEqual(Number(row?.cost), expectRow.cost, `${expectRow.name}销售成本应为${expectRow.cost}，实际${row?.cost}`)
+        }
       }
     })
   }
@@ -1143,7 +1220,7 @@ export default class extends TestCase {
       }
     }, {
       check(rows: any[]) {
-        CheckUtil.expectEqual(rows.length, 9, `餐品统计应为9行，实际${rows.length}`)
+        CheckUtil.expectEqual(rows.length, 10, `餐品统计应为9行加合计，实际${rows.length}`)
         CheckUtil.expectEqual(
           rows.some(row => row['菜品名称'] == '清炒萝卜' || row['物料名称'] == '塑料杯'),
           false,
@@ -1159,53 +1236,461 @@ export default class extends TestCase {
           rows.find(row => row['菜品名称'] == product && row['物料名称'] == material)
         expectExcel(find('红烧牛肉', '牛肉'), '红烧牛肉牛肉', {
           '物料编码': 'MAT_BEEF', '菜品销量': 80, 'bom数量': '30克',
-          '消耗数量总和': '24包', '用料占比': '100%', '差异数量': '11包50克',
-          '消耗金额总和': 5760, '金额占比': '100%', '差异金额': 3440
+          '理论数量': '24包', '实际数量': '35包50克', '用料占比': '100%', '差异数量': '11包50克',
+          '理论金额': 5760, '实际金额': 9200, '金额占比': '100%', '差异金额': 3440
         })
         expectExcel(find('羊肉炒白菜', '羊肉'), '羊肉炒白菜羊肉', {
           '物料编码': 'MAT_LAMB', '菜品销量': 100, 'bom数量': '10克',
-          '消耗数量总和': '10包', '用料占比': '35.71%',
+          '理论数量': '10包', '实际数量': fryExtra ? '9包68克' : '9包67克', '用料占比': '35.71%',
           '差异数量': fryExtra ? '-32克' : '-33克',
-          '消耗金额总和': 1200, '金额占比': '35.71%', '差异金额': fryCost - 1200
+          '理论金额': 1200, '实际金额': fryCost, '金额占比': '35.71%', '差异金额': fryCost - 1200
         })
         expectExcel(find('羊肉炒白菜', '白菜'), '羊肉炒白菜白菜', {
           '物料编码': 'MAT_CABBAGE', '菜品销量': 100, 'bom数量': '20克',
-          '消耗数量总和': '4斤', '用料占比': '100%', '差异数量': '30斤',
-          '消耗金额总和': 320, '金额占比': '100%', '差异金额': 3980
+          '理论数量': '4斤', '实际数量': '34斤', '用料占比': '100%', '差异数量': '30斤',
+          '理论金额': 320, '实际金额': 4300, '金额占比': '100%', '差异金额': 3980
         })
         expectExcel(find('萝卜煮羊肉', '羊肉'), '萝卜煮羊肉羊肉', {
           '物料编码': 'MAT_LAMB', '菜品销量': 60, 'bom数量': '30克',
-          '消耗数量总和': '18包', '用料占比': '64.29%',
+          '理论数量': '18包', '实际数量': fryExtra ? '17包42克' : '17包43克', '用料占比': '64.29%',
           '差异数量': fryExtra ? '-58克' : '-57克',
-          '消耗金额总和': 2160, '金额占比': '64.29%', '差异金额': stewCost - 2160
+          '理论金额': 2160, '实际金额': stewCost, '金额占比': '64.29%', '差异金额': stewCost - 2160
         })
         expectExcel(find('萝卜煮羊肉', '萝卜'), '萝卜煮羊肉萝卜', {
           '物料编码': 'MAT_RADISH', '菜品销量': 60, 'bom数量': '40克',
-          '消耗数量总和': '4斤400克', '用料占比': '100%', '差异数量': '30斤100克',
-          '消耗金额总和': 288, '金额占比': '100%', '差异金额': 1912
+          '理论数量': '4斤400克', '实际数量': '35斤', '用料占比': '100%', '差异数量': '30斤100克',
+          '理论金额': 288, '实际金额': 2200, '金额占比': '100%', '差异金额': 1912
         })
         expectExcel(find('番茄炒蛋', '番茄'), '番茄炒蛋番茄', {
           '物料编码': 'MAT_TOMATO', '菜品销量': 10, 'bom数量': '2个',
-          '消耗数量总和': '20个', '用料占比': '100%', '差异数量': '0个',
-          '消耗金额总和': 200, '金额占比': '100%', '差异金额': 40
+          '理论数量': '20个', '实际数量': '20个', '用料占比': '100%', '差异数量': '0个',
+          '理论金额': 200, '实际金额': 240, '金额占比': '100%', '差异金额': 40
         })
         expectExcel(find('番茄炒蛋', '鸡蛋'), '番茄炒蛋鸡蛋', {
           '物料编码': 'MAT_EGG', '菜品销量': 10, 'bom数量': '3个',
-          '消耗数量总和': '30个', '用料占比': '100%', '差异数量': '-20个',
-          '消耗金额总和': 240, '金额占比': '100%', '差异金额': -180
+          '理论数量': '30个', '实际数量': '10个', '用料占比': '100%', '差异数量': '-20个',
+          '理论金额': 240, '实际金额': 60, '金额占比': '100%', '差异金额': -180
         })
         expectExcel(find('洋葱按斤', '洋葱'), '洋葱按斤洋葱', {
           '物料编码': 'MAT_ONION', '菜品销量': 2, 'bom数量': '1斤',
-          '消耗数量总和': '2斤', '用料占比': '71.43%',
+          '理论数量': '2斤', '实际数量': jinExtra ? '7斤72克' : '7斤71克', '用料占比': '71.43%',
           '差异数量': jinExtra ? '5斤72克' : '5斤71克',
-          '消耗金额总和': 20, '金额占比': '71.43%', '差异金额': jinCost - 20
+          '理论金额': 20, '实际金额': jinCost, '金额占比': '71.43%', '差异金额': jinCost - 20
         })
         expectExcel(find('洋葱按克', '洋葱'), '洋葱按克洋葱', {
           '物料编码': 'MAT_ONION', '菜品销量': 4, 'bom数量': '100克',
-          '消耗数量总和': '400克', '用料占比': '28.57%',
+          '理论数量': '400克', '实际数量': jinExtra ? '2斤428克' : '2斤429克', '用料占比': '28.57%',
           '差异数量': jinExtra ? '2斤28克' : '2斤29克',
-          '消耗金额总和': 8, '金额占比': '28.57%', '差异金额': gramCost - 8
+          '理论金额': 8, '实际金额': gramCost, '金额占比': '28.57%', '差异金额': gramCost - 8
         })
+        expectExcel(rows.find(row => row['菜品名称'] == '合计'), '合计', {
+          '理论金额': 10196,
+          '实际金额': 21620,
+          '差异金额': 11424
+        })
+      }
+    })
+  }
+
+  /**
+   * 清炒萝卜 9月3日卖了 20 份，没有 BOM。
+   * 刷新前列表里有它，hasBomCnt 是 0。
+   * 补上萝卜 1 斤、50 元后，列表去掉它；再刷新，销售成本 1000，并扣 20 斤库存。
+   * 扣库存先入定时任务，要先全部计算。9月流水的销售金额加 1000，盘点少扣 1000。
+   */
+  private checkNoBomProduct(): BaseTest[] {
+    let period = {
+      warehouseId: '${warehouse.warehouseId}',
+      begin: '2026-09-01',
+      end: '2026-09-30'
+    }
+    let expectNames = (name: string, names: string[]) => {
+      return {
+        check(result) {
+          let content: any[] = result.result?.content ?? []
+          let got = content.map(row => row.name).join(',')
+          CheckUtil.expectEqual(got, names.join(','), `${name}应为${names.join(',') || '空'}，实际${got || '空'}`)
+        }
+      }
+    }
+    let expectCnt = (name: string, noBomCnt: number, hasBomCnt: number) => {
+      return {
+        check(result) {
+          let data = result.result ?? {}
+          CheckUtil.expectEqual(Number(data.noBomCnt), noBomCnt, `${name}没配BOM应为${noBomCnt}，实际${data.noBomCnt}`)
+          CheckUtil.expectEqual(Number(data.hasBomCnt), hasBomCnt, `${name}已配BOM应为${hasBomCnt}，实际${data.hasBomCnt}`)
+        }
+      }
+    }
+    return [
+      new Action({
+        name: '无BOM餐品9月',
+        url: '/app/state2/listNoBomProduct',
+        param: { ...period, pageSize: 20 }
+      }, expectNames('无BOM餐品9月', ['清炒萝卜'])),
+      new Action({
+        name: '刷新无BOM9月',
+        url: '/app/state2/refreshSalesRecordBom',
+        param: period
+      }, expectCnt('刷新无BOM9月', 1, 0)),
+      new Action({
+        name: '刷新后仍无BOM',
+        url: '/app/state2/listNoBomProduct',
+        param: { ...period, pageSize: 20 }
+      }, expectNames('刷新后仍无BOM', ['清炒萝卜'])),
+      new Action({
+        name: '清炒萝卜补BOM',
+        remark: '1斤萝卜，单价50。20份理论成本1000，库存扣20斤',
+        url: '/app/bom/saveBom',
+        param: {
+          productId: '${product.清炒萝卜}',
+          boms: [{
+            materialId: '${materialMap.萝卜.materialId}',
+            cnt: 1,
+            buyUnitFee: 1,
+            yieldRate: 1,
+            netCnt: 1,
+            price: 50,
+            stockBuyUnitFee: 1
+          }]
+        }
+      }),
+      new Action({
+        name: '补BOM后不在列表',
+        url: '/app/state2/listNoBomProduct',
+        param: { ...period, pageSize: 20 }
+      }, expectNames('补BOM后不在列表', [])),
+      new Action({
+        name: '按新BOM刷新销售',
+        url: '/app/state2/refreshSalesRecordBom',
+        param: period
+      }, expectCnt('按新BOM刷新销售', 1, 1)),
+      new Action({
+        name: '刷新后无BOM列表为空',
+        url: '/app/state2/listNoBomProduct',
+        param: { ...period, pageSize: 20 }
+      }, expectNames('刷新后无BOM列表为空', [])),
+      new Action({
+        name: '再次刷新无BOM',
+        url: '/app/state2/refreshSalesRecordBom',
+        param: period
+      }, expectCnt('再次刷新无BOM', 0, 0)),
+      new Action({
+        name: '清炒萝卜销售已回填',
+        url: '/app/salesRecord/listSalesRecord',
+        param: {
+          warehouseId: '${warehouse.warehouseId}',
+          begin: '2026-09-03',
+          end: '2026-09-03',
+          pageSize: 20
+        }
+      }, {
+        check(result) {
+          let content: any[] = result.result?.content ?? []
+          let row = content.find(item => item?.product?.name == '清炒萝卜')
+          CheckUtil.expectEqual(row != null, true, '9月3日应有清炒萝卜销售')
+          CheckUtil.expectEqual(Number(row?.cnt), 20, `清炒萝卜销量应为20，实际${row?.cnt}`)
+          CheckUtil.expectEqual(Number(row?.noBom), 0, `清炒萝卜noBom应为0，实际${row?.noBom}`)
+          CheckUtil.expectEqual(Number(row?.cost), 1000, `清炒萝卜销售成本应为1000，实际${row?.cost}`)
+        }
+      }),
+      new Recal(),
+      this.checkStockRecordCost('补BOM后流水金额9月', '2026-09-01', '2026-09-30', {
+        Instock: 16796,
+        Back: 350,
+        otherInstock: 240,
+        sales: 9118,
+        otherUse: 700,
+        Inventory: -12660
+      })
+    ]
+  }
+
+  /**
+   * 无单价入库列表。9月1日是牛肉、羊肉的 0 元入库。
+   * 10月4日正常入库、10月5日手工入库和其他入库都是「无单价」。
+   * 把正常入库单价改成 2 元后，它不再出现。
+   */
+  private checkListNoCost(): BaseTest[] {
+    let listParam = (begin: string, end: string) => ({
+      warehouseId: '${warehouse.warehouseId}',
+      begin,
+      end
+    })
+    let expectRow = (row: any, title: string, type: string, cnt: number, buyUnitFee: number, stockBuyUnitFee: number, unitName: string) => {
+      CheckUtil.expectEqual(row != null, true, `${title}应出现在无单价列表`)
+      CheckUtil.expectEqual(row?.type, type, `${title}类型应为${type}，实际${row?.type}`)
+      CheckUtil.expectEqual(
+        StockUtil.isEqPrice(
+          { price: Number(row?.price), buyUnitFee: Number(row?.stockBuyUnitFee) },
+          { price: 0, buyUnitFee: stockBuyUnitFee }
+        ),
+        true,
+        `${title}单价应为0/${stockBuyUnitFee}，实际${row?.price}/${row?.stockBuyUnitFee}`
+      )
+      CheckUtil.expectEqual(
+        StockUtil.isEq(
+          { cnt: Number(row?.cnt), buyUnitFee: Number(row?.buyUnitFee) },
+          { cnt, buyUnitFee }
+        ),
+        true,
+        `${title}数量应为${cnt}/${buyUnitFee}，实际${row?.cnt}/${row?.buyUnitFee}`
+      )
+      let units = row?.buyUnit ?? []
+      CheckUtil.expectEqual(
+        units.some(unit => unit?.name == unitName),
+        true,
+        `${title}规格应含${unitName}，实际${units.map(unit => unit?.name).join(',')}`
+      )
+      CheckUtil.expectEqual(
+        units.some(unit => unit?.unitsId == row?.unitsId),
+        true,
+        `${title}缺少标准单位 unitsId=${row?.unitsId}`
+      )
+      CheckUtil.expectEqual(
+        units.some(unit => unit?.unitsId == row?.stockUnitsId),
+        true,
+        `${title}缺少采购单位 stockUnitsId=${row?.stockUnitsId}`
+      )
+    }
+    return [
+      new Action({
+        name: '无单价列表9月1日',
+        url: '/app/state2/listNoCost',
+        param: listParam('2026-09-01', '2026-09-01')
+      }, {
+        check(result) {
+          let content: any[] = result.result?.content ?? []
+          CheckUtil.expectEqual(content.length, 2, `9月1日无单价应为2条，实际${content.length}`)
+          let beef = content.find(row => row.name == '牛肉')
+          let lamb = content.find(row => row.name == '羊肉')
+          expectRow(beef, '牛肉', 'Instock', 50, 100, -50, '包')
+          expectRow(lamb, '羊肉', 'Instock', 10, 100, -10, '包')
+        }
+      }),
+      new Action({
+        name: '10月5日手工入库无单价',
+        url: '/app/note/createHandInstock',
+        param: {
+          warehouseId: '${warehouse.warehouseId}',
+          salesDay: '2026-10-05',
+          items: [{
+            materialId: '${materialMap.无单价.materialId}',
+            supplierId: '${supplierMap.供应商1}',
+            cnt: 3,
+            buyUnitFee: 1,
+            price: 0,
+            stockBuyUnitFee: 1
+          }]
+        }
+      }),
+      new Action({
+        name: '10月5日其他入库无单价',
+        url: '/app/otherUse/saveOtherUse',
+        param: {
+          warehouseId: '${warehouse.warehouseId}',
+          openTypeId: '${otherInstockTypeId}',
+          isAdd: 1,
+          remark: '10月5日无单价其他入库',
+          createTime: '2026-10-05',
+          otherItems: [{
+            materialId: '${materialMap.无单价.materialId}',
+            cnt: 2,
+            buyUnitFee: 1,
+            price: 0,
+            stockBuyUnitFee: 1
+          }]
+        }
+      }),
+      new Action({
+        name: '无单价列表10月',
+        url: '/app/state2/listNoCost',
+        param: listParam('2026-10-04', '2026-10-05')
+      }, {
+        buildVariable(result) {
+          let content: any[] = result.result?.content ?? []
+          let row = content.find(item => item.name == '无单价' && Number(item.cnt) == 5)
+          return { noPriceInstockId: row?.stockRecordId }
+        },
+        check(result) {
+          let content: any[] = result.result?.content ?? []
+          let rows = content.filter(row => row.name == '无单价')
+          CheckUtil.expectEqual(rows.length, 3, `无单价应为3条，实际${rows.length}`)
+          expectRow(rows.find(row => Number(row.cnt) == 5), '正常入库', 'Instock', 5, 1, -5, '个')
+          expectRow(rows.find(row => Number(row.cnt) == 3), '手工入库', 'handInstock', 3, 1, -3, '个')
+          expectRow(rows.find(row => Number(row.cnt) == 2), '其他入库', 'otherInstock', 2, 1, -2, '个')
+        }
+      }),
+      new Action({
+        name: '修改无单价',
+        url: '/app/state2/updateStockRecord',
+        param: {
+          warehouseId: '${warehouse.warehouseId}',
+          array: [{
+            stockRecordId: '${noPriceInstockId}',
+            price: 2,
+            stockBuyUnitFee: 1
+          }]
+        }
+      }),
+      new Action({
+        name: '修改后无单价列表',
+        url: '/app/state2/listNoCost',
+        param: listParam('2026-10-04', '2026-10-05')
+      }, {
+        check(result) {
+          let content: any[] = result.result?.content ?? []
+          let rows = content.filter(row => row.name == '无单价')
+          CheckUtil.expectEqual(rows.length, 2, `改价后无单价应为2条，实际${rows.length}`)
+          CheckUtil.expectEqual(rows.some(row => Number(row.cnt) == 5), false, '正常入库改价后不应再出现')
+          expectRow(rows.find(row => Number(row.cnt) == 3), '手工入库', 'handInstock', 3, 1, -3, '个')
+          expectRow(rows.find(row => Number(row.cnt) == 2), '其他入库', 'otherInstock', 2, 1, -2, '个')
+        }
+      })
+    ]
+  }
+
+  /**
+   * 物料「无单价」在 10月4日入库 5 个，单价 0。
+   * 数量不是 0、金额是 0，这一天的统计应标出无单价。
+   */
+  private checkNoPrice(): BaseTest[] {
+    return [
+      ...this.instockNote('10月4日无单价', '2026-10-04', 'noPriceNote', [
+        { material: '无单价', supplier: '供应商1', cnt: 5, buyUnitFee: 1, price: 0, stockBuyUnitFee: 1 }
+      ]),
+      new Action({
+        name: '测试无单价',
+        url: '/app/state2/listMaterialAmount',
+        param: {
+          warehouseId: '${warehouse.warehouseId}',
+          begin: '2026-10-04',
+          end: '2026-10-04',
+          pageSize: 50
+        }
+      }, {
+        check(result) {
+          let content: any[] = result.result?.content ?? []
+          let row = content.find(item => item.name == '无单价')
+          CheckUtil.expectEqual(row != null, true, '10月4日应有无单价物料')
+          CheckUtil.expectEqual(Number(row?.instockAmount), 0, `无单价入库金额应为0，实际${row?.instockAmount}`)
+          CheckUtil.expectEqual(
+            StockUtil.isEq(
+              { cnt: Number(row?.instockCnt), buyUnitFee: Number(row?.buyUnitFee) },
+              { cnt: 5, buyUnitFee: 1 }
+            ),
+            true,
+            `无单价入库数量应为5个，实际 cnt=${row?.instockCnt} buyUnitFee=${row?.buyUnitFee}`
+          )
+        }
+      }),
+      new Action({
+        name: '测试无单价',
+        url: '/app/state2/stateWarehouse',
+        param: {
+          warehouseId: '${warehouse.warehouseId}',
+          begin: '2026-10-04',
+          end: '2026-10-04'
+        }
+      }, {
+        check(result) {
+          CheckUtil.expectEqual(!!result.result?.info?.noPrice, true, '10月4日应标记无单价')
+          CheckUtil.expectEqual(Number(result.result?.data?.instockAmount), 0, `10月4日入库金额应为0，实际${result.result?.data?.instockAmount}`)
+        }
+      })
+    ]
+  }
+
+  /**
+   * 其他消耗按 createTime 查区间。end 含当天。
+   * 9月6日有报损和其他入库。9月5日、以及 9月1日到9月5日都没有。
+   */
+  private checkOtherUsePeriod(): BaseTest[] {
+    let param = (begin: string, end: string, isAdd: number) => ({
+      warehouseId: '${warehouse.warehouseId}',
+      begin,
+      end,
+      isAdd,
+      pageSize: 20
+    })
+    let expectOne = (name: string, remark: string) => {
+      return {
+        check(result) {
+          let content: any[] = result.result?.content ?? []
+          CheckUtil.expectEqual(content.length, 1, `${name}应为1条，实际${content.length}`)
+          let row = content[0]
+          CheckUtil.expectEqual(row?.remark, remark, `${name}备注应为${remark}，实际${row?.remark}`)
+          let day = String(row?.createTime ?? '').substring(0, 10)
+          CheckUtil.expectEqual(day, '2026-09-06', `${name}日期应为2026-09-06，实际${row?.createTime}`)
+        }
+      }
+    }
+    let expectEmpty = (name: string) => {
+      return {
+        check(result) {
+          let content: any[] = result.result?.content ?? []
+          CheckUtil.expectEqual(content.length, 0, `${name}应为0条，实际${content.length}`)
+        }
+      }
+    }
+    return [
+      new Action({
+        name: '其他消耗9月6日',
+        url: '/app/otherUse/listOtherUse',
+        param: param('2026-09-06', '2026-09-06', 0)
+      }, expectOne('其他消耗9月6日', '9月6日报损')),
+      new Action({
+        name: '其他消耗9月5日',
+        url: '/app/otherUse/listOtherUse',
+        param: param('2026-09-05', '2026-09-05', 0)
+      }, expectEmpty('其他消耗9月5日')),
+      new Action({
+        name: '其他消耗9月1日到9月5日',
+        url: '/app/otherUse/listOtherUse',
+        param: param('2026-09-01', '2026-09-05', 0)
+      }, expectEmpty('其他消耗9月1日到9月5日')),
+      new Action({
+        name: '其他入库9月6日',
+        url: '/app/otherUse/listOtherUse',
+        param: param('2026-09-06', '2026-09-06', 1)
+      }, expectOne('其他入库9月6日', '9月6日其他入库')),
+      new Action({
+        name: '其他入库9月7日',
+        url: '/app/otherUse/listOtherUse',
+        param: param('2026-09-07', '2026-09-07', 1)
+      }, expectEmpty('其他入库9月7日'))
+    ]
+  }
+
+  /**
+   * 库存流水按 type 汇总 costOfChange。销售、其他耗用、退货乘 -1。
+   * 9月整月含洋葱。9月1日到5日只有入库、退货和销售。
+   */
+  private checkStockRecordCost(
+    name: string,
+    begin: string,
+    end: string,
+    expects: { [type: string]: number }
+  ): Action {
+    let types = Object.keys(expects).sort()
+    return new Action({
+      name,
+      url: '/app/state2/stateStockRecord',
+      param: {
+        begin,
+        end,
+        warehouseId: '${warehouse.warehouseId}',
+        warehouseGroupId: '${warehouse.warehouseGroupId}'
+      }
+    }, {
+      check(result) {
+        let rows: any[] = result.result?.content ?? []
+        let got = rows.map(row => row.type).join(',')
+        CheckUtil.expectEqual(got, types.join(','), `${name}类型应为${types.join(',')}，实际${got}`)
+        for (let type of types) {
+          let row = rows.find(item => item.type == type)
+          CheckUtil.expectEqual(Number(row?.cost), expects[type], `${name}.${type}应为${expects[type]}，实际${row?.cost}`)
+        }
       }
     })
   }

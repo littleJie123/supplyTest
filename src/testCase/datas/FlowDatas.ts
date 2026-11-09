@@ -764,10 +764,10 @@ export default class extends TestCase {
         '单位': '克',
         '菜品销量': 2,
         'bom数量': '1包',
-        '消耗数量总和': '2包',
+        '理论数量': '2包',
         '用料占比': '66.67%',
         '差异数量': '1包33.33克',
-        '消耗金额总和': 350,
+        '理论金额': 350,
         '金额占比': '63.64%',
         '差异金额': 509.09
       },
@@ -778,10 +778,10 @@ export default class extends TestCase {
         '单位': '克',
         '菜品销量': 1,
         'bom数量': '1包',
-        '消耗数量总和': '1包',
+        '理论数量': '1包',
         '用料占比': '33.33%',
         '差异数量': '66.67克',
-        '消耗金额总和': 200,
+        '理论金额': 200,
         '金额占比': '36.36%',
         '差异金额': 290.91
       }
@@ -799,7 +799,7 @@ export default class extends TestCase {
       }
     }, {
       check(rows: any[]) {
-        CheckUtil.expectEqual(rows.length, 2, `餐品统计行数应为2，实际${rows.length}`)
+        CheckUtil.expectEqual(rows.length, 3, `餐品统计行数应为2行加合计，实际${rows.length}`)
         for (let name in expects) {
           let row = rows.find(r => r['菜品名称'] == name)
           CheckUtil.expectEqual(row != null, true, `餐品统计缺少${name}`)
