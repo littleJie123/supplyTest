@@ -434,7 +434,7 @@
 
 物料「无单价」，单位个，供应商价是 0。前面的 9 月统计跑完以后，10月4日入库 5 个，单价 0。
 
-`测试无单价` 看这一天：物料入库数量是 5 个，入库金额是 0。门店统计 `noPrice` 为 true，入库金额也是 0。
+`测试无单价` 看这一天：物料入库数量是 5 个，入库金额是 0，`category.name` 是蔬菜。门店统计 `noPrice` 为 true，入库金额也是 0。
 
 `POST /app/state2/listNoCost` 查这段时间里 `cost` 为 0、`cnt` 不是 0 的正常入库、手工入库、其他入库。返回 `stockRecordId`、`type`、`name`、`buyUnit`、`unitsId`、`stockUnitsId`、`price`、`stockBuyUnitFee`、`cnt`、`buyUnitFee`。`unitsId`、`stockUnitsId` 与物料列表相同。改单价、改数量用 `/app/state2/updateStockRecord`。
 
@@ -464,3 +464,28 @@
 - 从 10月1日查到 10月2日：只有番茄。塑料杯的入库时间是 10月3日，不在范围内。
 - 只查 10月3日：只有塑料杯。
 - 从 10月1日查到 10月3日：番茄和塑料杯都在。
+
+## 入库列表和退货
+
+前面的统计都查完以后再测。9月4日的退货有单价，不改前面的金额。
+
+`POST /app/state2/listAllInstock` 查 9月1日到9月4日，共 11 条。退货数量是正数，单价来自订货明细：羊肉 1 包 150 元，白菜 2 斤 100 元，萝卜 3 斤 50 元。白菜这条的 `bussinessDate` 是 `2026-09-04`，`sysAddTime` 是创建当天的 `yyyy-MM-dd`，`userOfAdd.name` 是增加人。只查 9月4日白菜时只有这一条退货。
+
+`POST /app/state2/listNoCost` 同一段只有 9月1日牛肉、羊肉两条 0 元入库，没有退货。
+
+`POST /app/state2/listMaterialAmount` 查 9 月。牛肉、羊肉的 `category.name` 是肉类，鸡蛋是蛋类，白菜、番茄是蔬菜。
+
+10月4日「无单价」后来改成 2 元。退货单价沿用原明细，不能拿这张单退。10月7日再入库 2 个、单价 0，按这张明细退 2 个，时间改到 10月6日，然后全部计算。
+
+`stateStockRecord` 的金额看库存流水的 `costOfChange`。退货在汇总时乘 -1。退 2 个是 2 元，不是按订单单价算的。流水 `cost` 是订单金额，这时是 0。`listNoCost` 这一天只有这一条，数量 2，单价 0。`bussinessDate` 是 `2026-10-06`，并带创建时间和增加人。
+
+`/app/note/updatePrice` 先只把单价改成 5。数量仍是 2，流水 `cost` 变成 10，库存金额仍是 2。再只把数量改成 3，流水 `cost` 变成 15，重算后库存金额是 3。
+
+`/app/state2/updateStockRecord` 先只把单价改成 3。数量仍是 3，流水 `cost` 变成 9，库存金额仍是 3。再只把数量改成 1，流水 `cost` 变成 3，重算后库存金额是 1。
+
+- `listInstock` 里这条流水的数量是 -1，`cost` 是 3。
+- 退货明细入库数量是 1，单价是 3。
+- `listNoCost` 这一天为空。
+- `listAllInstock` 仍有这一条，数量 1，单价 3。
+- `stateStockRecord` 退货金额变成 1。只改数量会重算 `costOfChange`，改单价不改变库存金额。
+- 重算后查 `stock`。无单价剩 11 个，金额 9。10月4日 5 个共 10 元，后面的 0 元入库把数量并进同一批，退 1 个扣 1 元，10月7日再入 2 个金额仍是 0。

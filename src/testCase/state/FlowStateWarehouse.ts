@@ -812,7 +812,8 @@ export default class extends TestCase {
       ...this.checkStoreNoteTime(),
       ...this.checkNoPrice(),
       ...this.checkListNoCost(),
-      ...this.checkNoBomProduct()
+      ...this.checkNoBomProduct(),
+      ...this.checkInstockList()
     ]
   }
 
@@ -1407,6 +1408,384 @@ export default class extends TestCase {
   }
 
   /**
+   * 全部入库、无单价退货和退货修改。放在最后，避免改动前面的 9 月金额。
+   * 9月4日退货有单价，不进 listNoCost，但要出现在 listAllInstock，数量为正。
+   * 10月4日那张已经改成 2 元，退货会沿用原明细单价。另在 10月7日入库 2 个、单价 0，再按这张退。
+   * 退货时间改到 10月6日。stateStockRecord 的金额是流水 costOfChange，退货再乘 -1。
+   * 退 2 个、单价 0 时，流水 cost 是 0，库存金额是 2。
+   * updatePrice 先只改单价为 5，cost 变成 10，不重算。再只改数量为 3，cost 变成 15，重算后库存金额是 3。
+   * updateStockRecord 先只改单价为 3，cost 变成 9，不重算。再只改数量为 1，cost 变成 3，重算后库存金额是 1。
+   * 重算后核对 stock：无单价 11 个、金额 9。
+   */
+  private checkInstockList(): BaseTest[] {
+    let period = (begin: string, end: string, materialId?: string) => {
+      let param: any = {
+        warehouseId: '${warehouse.warehouseId}',
+        begin,
+        end,
+        pageSize: 50
+      }
+      if (materialId != null) {
+        param.materialId = materialId
+      }
+      return param
+    }
+    let expectQty = (row: any, title: string, cnt: number, buyUnitFee: number) => {
+      CheckUtil.expectEqual(
+        StockUtil.isEq(
+          { cnt: Number(row?.cnt), buyUnitFee: Number(row?.buyUnitFee) },
+          { cnt, buyUnitFee }
+        ),
+        true,
+        `${title}数量应为${cnt}/${buyUnitFee}，实际${row?.cnt}/${row?.buyUnitFee}`
+      )
+    }
+    let expectPrice = (row: any, title: string, price: number, stockBuyUnitFee: number) => {
+      CheckUtil.expectEqual(
+        StockUtil.isEqPrice(
+          { price: Number(row?.price), buyUnitFee: Number(row?.stockBuyUnitFee) },
+          { price, buyUnitFee: stockBuyUnitFee }
+        ),
+        true,
+        `${title}单价应为${price}/${stockBuyUnitFee}，实际${row?.price}/${row?.stockBuyUnitFee}`
+      )
+    }
+    let findBack = (content: any[], name: string) => {
+      return content.find(row => row?.name == name && row?.type == 'Back')
+    }
+    let expectInstockExtra = (row: any, title: string, day: string) => {
+      CheckUtil.expectEqual(
+        row?.bussinessDate,
+        day,
+        `${title}业务日期应为${day}，实际${row?.bussinessDate}`
+      )
+      CheckUtil.expectEqual(
+        row?.sysAddTime,
+        dayText(new Date()),
+        `${title}创建时间应为${dayText(new Date())}，实际${row?.sysAddTime}`
+      )
+      CheckUtil.expectEqual(
+        row?.userOfAdd?.name != null && row.userOfAdd.name !== '',
+        true,
+        `${title}应有增加人`
+      )
+    }
+    let checkBackCost = (name: string, cnt: number, cost: number) => {
+      return new Action({
+        name,
+        url: '/app/stockRecord/listInstock',
+        param: {
+          warehouseId: '${warehouse.warehouseId}',
+          materialId: '${materialMap.无单价.materialId}',
+          pageSize: 20
+        }
+      }, {
+        check(result) {
+          let content: any[] = result.result?.content ?? []
+          let row = content.find(item => item?.type == 'Back')
+          CheckUtil.expectEqual(row != null, true, '应有无单价退货流水')
+          CheckUtil.expectEqual(
+            StockUtil.isEq(row?.cnt, { cnt, buyUnitFee: 1 }),
+            true,
+            `${name}数量应为${cnt}/1，实际${row?.cnt?.cnt}/${row?.cnt?.buyUnitFee}`
+          )
+          CheckUtil.expectEqual(Number(row?.cost), cost, `${name}cost应为${cost}，实际${row?.cost}`)
+        }
+      })
+    }
+    return [
+      new Action({
+        name: '全部入库9月1日到9月4日',
+        url: '/app/state2/listAllInstock',
+        param: period('2026-09-01', '2026-09-04')
+      }, {
+        check(result) {
+          let content: any[] = result.result?.content ?? []
+          CheckUtil.expectEqual(content.length, 11, `9月1日到4日入库应为11条，实际${content.length}`)
+          let lamb = findBack(content, '羊肉')
+          let cabbage = findBack(content, '白菜')
+          let radish = findBack(content, '萝卜')
+          CheckUtil.expectEqual(lamb != null && cabbage != null && radish != null, true, '9月4日退货应出现在全部入库')
+          expectQty(lamb, '羊肉退货', 1, 1)
+          expectPrice(lamb, '羊肉退货', 150, 1)
+          expectQty(cabbage, '白菜退货', 2, 1)
+          expectPrice(cabbage, '白菜退货', 100, 1)
+          expectInstockExtra(cabbage, '白菜退货', '2026-09-04')
+          expectQty(radish, '萝卜退货', 3, 1)
+          expectPrice(radish, '萝卜退货', 50, 1)
+        }
+      }),
+      new Action({
+        name: '有单价退货不进无单价',
+        url: '/app/state2/listNoCost',
+        param: period('2026-09-01', '2026-09-04')
+      }, {
+        check(result) {
+          let content: any[] = result.result?.content ?? []
+          let backs = content.filter(row => row?.type == 'Back')
+          CheckUtil.expectEqual(backs.length, 0, `有单价退货不应出现，实际${backs.length}条`)
+          CheckUtil.expectEqual(content.length, 2, `这段无单价应为9月1日两条，实际${content.length}`)
+        }
+      }),
+      new Action({
+        name: '全部入库只查白菜',
+        url: '/app/state2/listAllInstock',
+        param: period('2026-09-04', '2026-09-04', '${materialMap.白菜.materialId}')
+      }, {
+        check(result) {
+          let content: any[] = result.result?.content ?? []
+          CheckUtil.expectEqual(content.length, 1, `9月4日白菜应为1条，实际${content.length}`)
+          expectQty(content[0], '白菜退货', 2, 1)
+          expectPrice(content[0], '白菜退货', 100, 1)
+          CheckUtil.expectEqual(content[0]?.type, 'Back', `类型应为Back，实际${content[0]?.type}`)
+        }
+      }),
+      new Action({
+        name: '物料分类',
+        url: '/app/state2/listMaterialAmount',
+        param: {
+          warehouseId: '${warehouse.warehouseId}',
+          begin: '2026-09-01',
+          end: '2026-09-30',
+          pageSize: 100
+        }
+      }, {
+        check(result) {
+          let content: any[] = result.result?.content ?? []
+          let expects: { [name: string]: string } = {
+            牛肉: '肉类',
+            羊肉: '肉类',
+            鸡蛋: '蛋类',
+            白菜: '蔬菜',
+            番茄: '蔬菜'
+          }
+          for (let name in expects) {
+            let row = content.find(item => item.name == name)
+            CheckUtil.expectEqual(row != null, true, `9月应有${name}`)
+            CheckUtil.expectEqual(
+              row?.category?.name,
+              expects[name],
+              `${name}分类应为${expects[name]}，实际${row?.category?.name}`
+            )
+          }
+        }
+      }),
+      ...this.instockNote('10月7日零元入库', '2026-10-07', 'zeroSrcNote', [
+        { material: '无单价', supplier: '供应商1', cnt: 2, buyUnitFee: 1, price: 0, stockBuyUnitFee: 1 }
+      ]),
+      this.listNoteItems('zeroSrcNote', 'noPriceItems'),
+      new Action({
+        name: '10月6日无单价退货',
+        url: '/app/noteBack/createNoteBack',
+        param: { warehouseId: '${warehouse.warehouseId}' }
+      }, {
+        parseHttpParam(ret: any, variable: any) {
+          let row = (variable.noPriceItems ?? [])[0]
+          ret.items = [{
+            noteItemId: row?.noteItemId,
+            stockUnitsId: row?.stockUnitsId,
+            cnt: 2,
+            buyUnitFee: 1,
+            price: 0,
+            supplierId: row?.supplierId,
+            materialId: row?.materialId,
+            stockBuyUnitFee: 1,
+            remark: '10月6日无单价退货'
+          }]
+          return ret
+        }
+      }),
+      new Action({
+        name: '查询无单价退货单',
+        url: '/app/note/listNote',
+        param: {
+          status: 'instocked',
+          type: 'back',
+          warehouseId: '${warehouse.warehouseId}',
+          pageSize: 20
+        }
+      }, {
+        buildVariable(result) {
+          let content: any[] = result.result?.content ?? []
+          let row = content[0]
+          for (let item of content) {
+            if (Number(item?.noteId) > Number(row?.noteId ?? 0)) {
+              row = item
+            }
+          }
+          return { zeroBackNoteId: row?.noteId }
+        },
+        check(result) {
+          let content: any[] = result.result?.content ?? []
+          CheckUtil.expectEqual(content.length >= 3, true, `退货单至少3张，实际${content.length}`)
+        }
+      }),
+      new Action({
+        name: '取无单价退货明细',
+        url: '/app/noteItem/listNoteItem',
+        param: { noteId: '${zeroBackNoteId}' }
+      }, {
+        buildVariable(result) {
+          let row = (result.result?.content ?? [])[0]
+          return { zeroBackNoteItemId: row?.noteItemId }
+        }
+      }),
+      this.updateNoteTime('无单价退货', '${zeroBackNoteId}', '2026-10-06'),
+      new Recal(),
+      new Action({
+        name: '无单价退货进列表',
+        url: '/app/state2/listNoCost',
+        param: period('2026-10-06', '2026-10-06')
+      }, {
+        buildVariable(result) {
+          let content: any[] = result.result?.content ?? []
+          let row = content.find(item => item?.name == '无单价' && item?.type == 'Back')
+          return { zeroBackRecordId: row?.stockRecordId }
+        },
+        check(result) {
+          let content: any[] = result.result?.content ?? []
+          CheckUtil.expectEqual(content.length, 1, `10月6日无单价应为1条，实际${content.length}`)
+          let row = content[0]
+          CheckUtil.expectEqual(row?.type, 'Back', `类型应为Back，实际${row?.type}`)
+          CheckUtil.expectEqual(row?.name, '无单价', `物料应为无单价，实际${row?.name}`)
+          expectQty(row, '无单价退货', 2, 1)
+          expectPrice(row, '无单价退货', 0, 1)
+          expectInstockExtra(row, '无单价退货', '2026-10-06')
+        }
+      }),
+      this.checkStockRecordCost('无单价退货重算前', '2026-10-06', '2026-10-06', { Back: 2 }),
+      checkBackCost('退货流水cost为0', -2, 0),
+      new Action({
+        name: 'updatePrice只改单价',
+        url: '/app/note/updatePrice',
+        param: {
+          warehouseId: '${warehouse.warehouseId}',
+          noteItems: [{
+            noteItemId: '${zeroBackNoteItemId}',
+            price: 5,
+            stockBuyUnitFee: 1
+          }]
+        }
+      }),
+      checkBackCost('改价后流水cost', -2, 10),
+      this.checkStockRecordCost('改价后不重算', '2026-10-06', '2026-10-06', { Back: 2 }),
+      new Action({
+        name: 'updatePrice只改数量',
+        url: '/app/note/updatePrice',
+        param: {
+          warehouseId: '${warehouse.warehouseId}',
+          noteItems: [{
+            noteItemId: '${zeroBackNoteItemId}',
+            instockCnt: 3,
+            buyUnitFee: 1,
+            stockBuyUnitFee: 1
+          }]
+        }
+      }),
+      new Recal(),
+      checkBackCost('改数量后流水cost', -3, 15),
+      this.checkStockRecordCost('改数量后重算', '2026-10-06', '2026-10-06', { Back: 3 }),
+      new Action({
+        name: 'updateStockRecord只改单价',
+        url: '/app/state2/updateStockRecord',
+        param: {
+          array: [{
+            stockRecordId: '${zeroBackRecordId}',
+            price: 3,
+            stockBuyUnitFee: 1
+          }]
+        }
+      }),
+      checkBackCost('流水改价后cost', -3, 9),
+      this.checkStockRecordCost('流水改价后不重算', '2026-10-06', '2026-10-06', { Back: 3 }),
+      new Action({
+        name: 'updateStockRecord只改数量',
+        url: '/app/state2/updateStockRecord',
+        param: {
+          array: [{
+            stockRecordId: '${zeroBackRecordId}',
+            cnt: 1,
+            buyUnitFee: 1
+          }]
+        }
+      }),
+      new Recal(),
+      new Action({
+        name: '退货流水仍为负',
+        url: '/app/stockRecord/listInstock',
+        param: {
+          warehouseId: '${warehouse.warehouseId}',
+          materialId: '${materialMap.无单价.materialId}',
+          pageSize: 20
+        }
+      }, {
+        check(result) {
+          let content: any[] = result.result?.content ?? []
+          let row = content.find(item => item?.type == 'Back')
+          CheckUtil.expectEqual(row != null, true, '应有无单价退货流水')
+          CheckUtil.expectEqual(
+            StockUtil.isEq(row?.cnt, { cnt: -1, buyUnitFee: 1 }),
+            true,
+            `退货流水数量应为-1/1，实际${row?.cnt?.cnt}/${row?.cnt?.buyUnitFee}`
+          )
+          CheckUtil.expectEqual(Number(row?.cost), 3, `退货流水cost应为3，实际${row?.cost}`)
+        }
+      }),
+      new Action({
+        name: '退货明细已改',
+        url: '/app/noteItem/listNoteItem',
+        param: { noteId: '${zeroBackNoteId}' }
+      }, {
+        check(result) {
+          let content: any[] = result.result?.content ?? []
+          CheckUtil.expectEqual(content.length, 1, `退货明细应为1条，实际${content.length}`)
+          let row = content[0]
+          CheckUtil.expectEqual(
+            StockUtil.isEq(row?.instock, { cnt: 1, buyUnitFee: 1 }),
+            true,
+            `退货明细数量应为1/1，实际${row?.instock?.cnt}/${row?.instock?.buyUnitFee}`
+          )
+          expectPrice(
+            {
+              price: row?.supplierMaterial?.price,
+              stockBuyUnitFee: row?.supplierMaterial?.buyUnitFee
+            },
+            '退货明细',
+            3,
+            1
+          )
+        }
+      }),
+      new Action({
+        name: '改价后不进无单价',
+        url: '/app/state2/listNoCost',
+        param: period('2026-10-06', '2026-10-06')
+      }, {
+        check(result) {
+          let content: any[] = result.result?.content ?? []
+          CheckUtil.expectEqual(content.length, 0, `改价后退货不应再出现，实际${content.length}`)
+        }
+      }),
+      new Action({
+        name: '改价后仍在全部入库',
+        url: '/app/state2/listAllInstock',
+        param: period('2026-10-06', '2026-10-06')
+      }, {
+        check(result) {
+          let content: any[] = result.result?.content ?? []
+          CheckUtil.expectEqual(content.length, 1, `10月6日全部入库应为1条，实际${content.length}`)
+          let row = content[0]
+          CheckUtil.expectEqual(row?.type, 'Back', `类型应为Back，实际${row?.type}`)
+          expectQty(row, '无单价退货', 1, 1)
+          expectPrice(row, '无单价退货', 3, 1)
+        }
+      }),
+      this.checkStockRecordCost('无单价退货重算后', '2026-10-06', '2026-10-06', { Back: 1 }),
+      this.checkMaterialStock('重算后库存', '无单价', 11, 1, 9)
+    ]
+  }
+
+  /**
    * 无单价入库列表。9月1日是牛肉、羊肉的 0 元入库。
    * 10月4日正常入库、10月5日手工入库和其他入库都是「无单价」。
    * 把正常入库单价改成 2 元后，它不再出现。
@@ -1573,6 +1952,7 @@ export default class extends TestCase {
           let content: any[] = result.result?.content ?? []
           let row = content.find(item => item.name == '无单价')
           CheckUtil.expectEqual(row != null, true, '10月4日应有无单价物料')
+          CheckUtil.expectEqual(row?.category?.name, '蔬菜', `无单价分类应为蔬菜，实际${row?.category?.name}`)
           CheckUtil.expectEqual(Number(row?.instockAmount), 0, `无单价入库金额应为0，实际${row?.instockAmount}`)
           CheckUtil.expectEqual(
             StockUtil.isEq(
@@ -2922,6 +3302,44 @@ export default class extends TestCase {
         )
       }
     })  }
+
+  /**
+   * 重算后核对一张物料的 stock。数量用 StockUtil.isEq，金额直接比 cost。
+   * 无单价：10月4日 5 个共 10 元，随后 0 元入库把数量并进同一批，退 1 个扣 1 元，10月7日再入 2 个金额为 0。
+   */
+  private checkMaterialStock(step: string, name: string, cnt: number, buyUnitFee: number, cost: number): BaseTest {
+    let variable = this.getVariable()
+    return new Action({
+      name: step,
+      url: '/free/query',
+      param: {
+        array: [{
+          table: 'stock',
+          query: {
+            warehouseId: '${warehouse.warehouseId}',
+            warehouseGroupId: '${warehouse.warehouseGroupId}',
+            isDel: 0
+          }
+        }]
+      }
+    }, {
+      check(result) {
+        let rows: any[] = result.result?.stock ?? []
+        let materialId = variable.materialMap?.[name]?.materialId
+        let stock = rows.find((row: any) => String(row.materialId) === String(materialId))
+        CheckUtil.expectEqual(stock != null, true, `${name}库存不存在`)
+        CheckUtil.expectEqual(
+          StockUtil.isEq(
+            { cnt: Number(stock?.cnt), buyUnitFee: Number(stock?.buyUnitFee) },
+            { cnt, buyUnitFee }
+          ),
+          true,
+          `${name}库存数量应为${cnt}/${buyUnitFee}，实际${stock?.cnt}/${stock?.buyUnitFee}`
+        )
+        CheckUtil.expectEqual(Number(stock?.cost), cost, `${name}库存金额应为${cost}，实际${stock?.cost}`)
+      }
+    })
+  }
 
   private checkStock(costOf?: { [name: string]: number }): BaseTest {
     let variable = this.getVariable()
