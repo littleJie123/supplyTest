@@ -1,5 +1,7 @@
 /**
- * 生成 FlowOtherUseUpload 用的 excel，表头与 excel_target_col.target_col 一致。
+ * 生成 FlowOtherUse 导入用的 excel。
+ * 规格跟 PreTestWithMeat：猪肉按克，西瓜按个，牛肉按包。
+ * 成功导入不再带日期、类型。错误文件仍带这两列，用来确认服务端不再校验它们。
  */
 const fs = require('fs')
 const path = require('path')
@@ -16,33 +18,44 @@ function writeExcel(filePath, headers, rows) {
   console.log('wrote', filePath)
 }
 
-const root = path.join(__dirname, '../excel/flowOtherUseUpload')
-const instockHead = ['物料名称', '物料编码', '物料单位', '物料数量', '日期', '类型', '价格']
-const useHead = ['物料名称', '物料编码', '物料单位', '物料数量', '日期', '类型']
+const root = path.join(__dirname, '../excel/flowOtherUse')
+const instockHead = ['物料名称', '物料编码', '物料单位', '物料数量', '价格']
+const useHead = ['物料名称', '物料编码', '物料单位', '物料数量']
+const instockHeadOld = ['物料名称', '物料编码', '物料单位', '物料数量', '日期', '类型', '价格']
+const useHeadOld = ['物料名称', '物料编码', '物料单位', '物料数量', '日期', '类型']
 
-writeExcel(path.join(root, '其他入库错误.xlsx'), instockHead, [
-  ['牛肉', '', '克', 100, '2026-01-01', '白拿', 1],
-  ['猪肉1', '', '包', 100, '2026-01-01', '白拿', 2],
-  ['羊肉', '', '包', 100, '2026-01-01', '赠予', 3]
+writeExcel(path.join(root, '其他入库错误.xlsx'), instockHeadOld, [
+  ['牛肉', '', '包', 1, '2026-07-20', '白拿', 10],
+  ['猪肉1', '', '克', 100, '2026-07-20', '白拿', 2],
+  ['西瓜', '', '个', 1, '2026-07-20', '赠予', 10]
 ])
 
-writeExcel(path.join(root, '其他入库正确.xlsx'), instockHead, [
-  ['牛肉', '', '克', 100, '2026-01-01', '天上掉的', 1],
-  ['猪肉1', 'zhurou', '包', 100, '2026-01-01', '天上掉的', 2],
-  ['羊肉', '', '包', 10, '2026-01-02', '赠予', 3],
-  ['羊肉', '', '包', 20, '2026-01-02', '赠予', 4],
-  ['猪肉', '', '包', 20, '2026-01-03', '赠予', 5]
+writeExcel(path.join(root, '其他入库天上掉的.xlsx'), instockHead, [
+  ['猪肉', 'MAT003', '克', 100, 2]
 ])
 
-writeExcel(path.join(root, '其他消耗错误.xlsx'), useHead, [
-  ['牛肉', '', '克', 10, '2026-01-04', '赠予'],
-  ['猪肉1', '', '包', 10, '2026-01-04', '报损'],
-  ['羊肉', '', '包', 1, '2026-01-04', '报损']
+writeExcel(path.join(root, '其他入库赠予.xlsx'), instockHead, [
+  ['西瓜', '', '个', 1, 20]
 ])
 
-writeExcel(path.join(root, '其他消耗正确.xlsx'), useHead, [
-  ['牛肉', '', '克', 40, '2026-01-04', '报损'],
-  ['猪肉', 'zhurou', '包', 20, '2026-01-04', '报损'],
-  ['羊肉', '', '包', 5, '2026-01-05', '员工餐'],
-  ['羊肉', '', '包', 5, '2026-01-05', '员工餐']
+writeExcel(path.join(root, '其他消耗错误.xlsx'), useHeadOld, [
+  ['牛肉', '', '包', 1, '2026-07-22', '赠予'],
+  ['猪肉1', '', '克', 1, '2026-07-22', '报损'],
+  ['西瓜', '', '个', 1, '2026-07-22', '报损']
 ])
+
+writeExcel(path.join(root, '其他消耗员工餐.xlsx'), useHead, [
+  ['西瓜', '', '个', 1],
+  ['西瓜', '', '个', 1]
+])
+
+const oldRoot = path.join(__dirname, '../excel/flowOtherUseUpload')
+if (fs.existsSync(oldRoot)) {
+  for (let name of fs.readdirSync(oldRoot)) {
+    let filePath = path.join(oldRoot, name)
+    fs.unlinkSync(filePath)
+    console.log('removed', filePath)
+  }
+  fs.rmdirSync(oldRoot)
+  console.log('removed dir', oldRoot)
+}

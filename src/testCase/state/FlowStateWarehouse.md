@@ -479,13 +479,29 @@
 
 `stateStockRecord` 的金额看库存流水的 `costOfChange`。退货在汇总时乘 -1。退 2 个是 2 元，不是按订单单价算的。流水 `cost` 是订单金额，这时是 0。`listNoCost` 这一天只有这一条，数量 2，单价 0。`bussinessDate` 是 `2026-10-06`，并带创建时间和增加人。
 
-`/app/note/updatePrice` 先只把单价改成 5。数量仍是 2，流水 `cost` 变成 10，库存金额仍是 2。再只把数量改成 3，流水 `cost` 变成 15，重算后库存金额是 3。
+`/app/note/updatePrice` 先只把单价改成 5。数量仍是 2，流水 `cost` 变成 -10，库存金额仍是 2。再只把数量改成 3，流水 `cost` 变成 -15，重算后库存金额是 3。
 
-`/app/state2/updateStockRecord` 先只把单价改成 3。数量仍是 3，流水 `cost` 变成 9，库存金额仍是 3。再只把数量改成 1，流水 `cost` 变成 3，重算后库存金额是 1。
+`/app/state2/updateStockRecord` 先只把单价改成 3。数量仍是 3，流水 `cost` 变成 -9，库存金额仍是 3。再只把数量改成 1，流水 `cost` 变成 -3，重算后库存金额是 1。
 
-- `listInstock` 里这条流水的数量是 -1，`cost` 是 3。
+- `listInstock` 里这条流水的数量是 -1，`cost` 是 -3。
 - 退货明细入库数量是 1，单价是 3。
 - `listNoCost` 这一天为空。
 - `listAllInstock` 仍有这一条，数量 1，单价 3。
 - `stateStockRecord` 退货金额变成 1。只改数量会重算 `costOfChange`，改单价不改变库存金额。
 - 重算后查 `stock`。无单价剩 11 个，金额 9。10月4日 5 个共 10 元，后面的 0 元入库把数量并进同一批，退 1 个扣 1 元，10月7日再入 2 个金额仍是 0。
+
+## 按物料查流水和对应单据
+
+`POST /app/state2/schStockRecord` 查白菜，`type=allInstock`，9月2日到9月6日，按业务日期 3 条：9月2日入库 12 斤、单价 100；9月4日退货 2 斤、单价 100；9月5日入库 10 斤、单价 200。退货数量是正数，并带增加人。
+
+9月2日这条入库流水打开 `POST /app/state2/getNoteByStockRecordId`，`type` 是 `note`。订单有 2 个物料，订货金额和入库金额都是 3200，创建时间和入库时间都是 `2026-09-02`。增加人是 `userOfAdd.name`。
+
+9月6日白菜报损在库里数量相当于 -5/1，`cost` 是 0。`type=otherUse` 查出来数量是 5/1，单价用 `costOfChange`。对应单据 `type` 是 `otherUse`，`otherType.name` 是报损，物料数 2，不返回 `cost`，创建时间 `2026-09-06`。
+
+9月3日白菜销售有 1 条，数量是正数。这条流水没有订单，`result` 为空。
+
+## 按物料查餐品、按分类查物料成本
+
+`POST /app/product/listProduct` 传 `materialId`。白菜只有羊肉炒白菜，羊肉有羊肉炒白菜和萝卜煮羊肉，洋葱有洋葱按斤和洋葱按克，塑料杯没有配方，结果为空。
+
+`POST /app/state2/listMaterialAmount` 查 9 月，传 `categoryId`。肉类是牛肉、羊肉。蔬菜是白菜、萝卜、番茄、塑料杯、洋葱。蛋类是鸡蛋。不存在的分类为空。再传 `orderBy=name`、`desc=asc`，分类结果不变，顺序仍按 `amount` 倒序。

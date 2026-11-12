@@ -813,7 +813,9 @@ export default class extends TestCase {
       ...this.checkNoPrice(),
       ...this.checkListNoCost(),
       ...this.checkNoBomProduct(),
-      ...this.checkInstockList()
+      ...this.checkInstockList(),
+      ...this.checkMaterialSearch(),
+      ...this.checkSchStockRecord()
     ]
   }
 
@@ -1413,8 +1415,8 @@ export default class extends TestCase {
    * 10月4日那张已经改成 2 元，退货会沿用原明细单价。另在 10月7日入库 2 个、单价 0，再按这张退。
    * 退货时间改到 10月6日。stateStockRecord 的金额是流水 costOfChange，退货再乘 -1。
    * 退 2 个、单价 0 时，流水 cost 是 0，库存金额是 2。
-   * updatePrice 先只改单价为 5，cost 变成 10，不重算。再只改数量为 3，cost 变成 15，重算后库存金额是 3。
-   * updateStockRecord 先只改单价为 3，cost 变成 9，不重算。再只改数量为 1，cost 变成 3，重算后库存金额是 1。
+   * updatePrice 先只改单价为 5，cost 变成 -10，不重算。再只改数量为 3，cost 变成 -15，重算后库存金额是 3。
+   * updateStockRecord 先只改单价为 3，cost 变成 -9，不重算。再只改数量为 1，cost 变成 -3，重算后库存金额是 1。
    * 重算后核对 stock：无单价 11 个、金额 9。
    */
   private checkInstockList(): BaseTest[] {
@@ -1667,7 +1669,7 @@ export default class extends TestCase {
           }]
         }
       }),
-      checkBackCost('改价后流水cost', -2, 10),
+      checkBackCost('改价后流水cost', -2, -10),
       this.checkStockRecordCost('改价后不重算', '2026-10-06', '2026-10-06', { Back: 2 }),
       new Action({
         name: 'updatePrice只改数量',
@@ -1683,7 +1685,7 @@ export default class extends TestCase {
         }
       }),
       new Recal(),
-      checkBackCost('改数量后流水cost', -3, 15),
+      checkBackCost('改数量后流水cost', -3, -15),
       this.checkStockRecordCost('改数量后重算', '2026-10-06', '2026-10-06', { Back: 3 }),
       new Action({
         name: 'updateStockRecord只改单价',
@@ -1696,7 +1698,7 @@ export default class extends TestCase {
           }]
         }
       }),
-      checkBackCost('流水改价后cost', -3, 9),
+      checkBackCost('流水改价后cost', -3, -9),
       this.checkStockRecordCost('流水改价后不重算', '2026-10-06', '2026-10-06', { Back: 3 }),
       new Action({
         name: 'updateStockRecord只改数量',
@@ -1728,7 +1730,7 @@ export default class extends TestCase {
             true,
             `退货流水数量应为-1/1，实际${row?.cnt?.cnt}/${row?.cnt?.buyUnitFee}`
           )
-          CheckUtil.expectEqual(Number(row?.cost), 3, `退货流水cost应为3，实际${row?.cost}`)
+          CheckUtil.expectEqual(Number(row?.cost), -3, `退货流水cost应为-3，实际${row?.cost}`)
         }
       }),
       new Action({
@@ -2521,6 +2523,337 @@ export default class extends TestCase {
         }
       })
     ]
+  }
+
+  /**
+   * 按物料查流水，并从流水打开订单或其他出入库单。
+   * 白菜 9月2日入库、9月4日退货、9月5日入库走 allInstock。报损 cost 为 0，单价用 costOfChange。
+   * 销售流水没有订单，返回空 result。
+   */
+  private checkSchStockRecord(): BaseTest[] {
+    let variable = this.getVariable()
+    let sch = (type: string, material: string, begin: string, end: string) => {
+      return {
+        warehouseId: '${warehouse.warehouseId}',
+        materialId: `\${materialMap.${material}.materialId}`,
+        type,
+        begin,
+        end,
+        pageSize: 50
+      }
+    }
+    let expectQty = (row: any, title: string, cnt: number, buyUnitFee: number) => {
+      CheckUtil.expectEqual(
+        StockUtil.isEq(
+          { cnt: Number(row?.cnt), buyUnitFee: Number(row?.buyUnitFee) },
+          { cnt, buyUnitFee }
+        ),
+        true,
+        `${title}数量应为${cnt}/${buyUnitFee}，实际${row?.cnt}/${row?.buyUnitFee}`
+      )
+    }
+    let expectPrice = (row: any, title: string, price: number, buyUnitFee: number) => {
+      CheckUtil.expectEqual(
+        StockUtil.isEqPrice(
+          { price: Number(row?.price), buyUnitFee: Number(row?.stockBuyUnitFee) },
+          { price, buyUnitFee }
+        ),
+        true,
+        `${title}单价应为${price}/${buyUnitFee}，实际${row?.price}/${row?.stockBuyUnitFee}`
+      )
+    }
+    return [
+      new Action({
+        name: '白菜全部入库',
+        highlight: true,
+        url: '/app/state2/schStockRecord',
+        param: sch('allInstock', '白菜', '2026-09-02', '2026-09-06')
+      }, {
+        check(result) {
+          let content: any[] = result.result?.content ?? []
+          CheckUtil.expectEqual(content.length, 3, `白菜全部入库应为3条，实际${content.length}`)
+          CheckUtil.expectEqual(content[0]?.type, 'Instock', `第1条应为入库，实际${content[0]?.type}`)
+          expectQty(content[0], '9月2日白菜', 12, 1)
+          expectPrice(content[0], '9月2日白菜', 100, 1)
+          CheckUtil.expectEqual(content[0]?.bussinessDate, '2026-09-02', `入库日期应为2026-09-02，实际${content[0]?.bussinessDate}`)
+          CheckUtil.expectEqual(content[1]?.type, 'Back', `第2条应为退货，实际${content[1]?.type}`)
+          expectQty(content[1], '9月4日白菜退货', 2, 1)
+          expectPrice(content[1], '9月4日白菜退货', 100, 1)
+          CheckUtil.expectEqual(content[1]?.bussinessDate, '2026-09-04', `退货日期应为2026-09-04，实际${content[1]?.bussinessDate}`)
+          CheckUtil.expectEqual(
+            content[1]?.userOfAdd?.name != null && content[1].userOfAdd.name !== '',
+            true,
+            '退货应有增加人'
+          )
+          CheckUtil.expectEqual(content[2]?.type, 'Instock', `第3条应为入库，实际${content[2]?.type}`)
+          expectQty(content[2], '9月5日白菜', 10, 1)
+          expectPrice(content[2], '9月5日白菜', 200, 1)
+        }
+      }),
+      new Action({
+        name: '白菜9月2日入库流水',
+        highlight: true,
+        url: '/app/state2/schStockRecord',
+        param: sch('Instock', '白菜', '2026-09-02', '2026-09-02')
+      }, {
+        buildVariable(result) {
+          let content: any[] = result.result?.content ?? []
+          return { cabbageInstockId: content[0]?.stockRecordId }
+        },
+        check(result) {
+          let content: any[] = result.result?.content ?? []
+          CheckUtil.expectEqual(content.length, 1, `9月2日白菜入库应为1条，实际${content.length}`)
+          expectQty(content[0], '9月2日白菜', 12, 1)
+          expectPrice(content[0], '9月2日白菜', 100, 1)
+        }
+      }),
+      new Action({
+        name: '入库流水对应订单',
+        highlight: true,
+        url: '/app/state2/getNoteByStockRecordId',
+        param: { stockRecordId: '${cabbageInstockId}' }
+      }, {
+        check(result) {
+          let bill = result.result ?? {}
+          CheckUtil.expectEqual(bill.type, 'note', `类型应为note，实际${bill.type}`)
+          let data = bill.data ?? {}
+          CheckUtil.expectEqual(data.title != null && data.title !== '', true, '订单应有标题')
+          CheckUtil.expectEqual(Number(data.materialCnt), 2, `物料数应为2，实际${data.materialCnt}`)
+          CheckUtil.expectEqual(Number(data.cost), 3200, `订货金额应为3200，实际${data.cost}`)
+          CheckUtil.expectEqual(Number(data.instockCost), 3200, `入库金额应为3200，实际${data.instockCost}`)
+          CheckUtil.expectEqual(data.createTime, '2026-09-02', `创建时间应为2026-09-02，实际${data.createTime}`)
+          CheckUtil.expectEqual(data.instockTime, '2026-09-02', `入库时间应为2026-09-02，实际${data.instockTime}`)
+          CheckUtil.expectEqual(data.statementTime == null, true, `未结算不应有结算时间，实际${data.statementTime}`)
+          CheckUtil.expectEqual(
+            data.userOfAdd?.name != null && data.userOfAdd.name !== '',
+            true,
+            '订单应有增加人'
+          )
+          CheckUtil.expectEqual(data.addUser == null, true, '不应返回addUser')
+        }
+      }),
+      new Action({
+        name: '查询白菜报损流水原值',
+        highlight: true,
+        url: '/free/query',
+        param: {
+          array: [{
+            table: 'stock_record',
+            query: {
+              warehouseId: '${warehouse.warehouseId}',
+              warehouseGroupId: '${warehouse.warehouseGroupId}',
+              materialId: '${materialMap.白菜.materialId}',
+              type: 'otherUse',
+              isDel: 0
+            }
+          }]
+        }
+      }, {
+        buildVariable(result) {
+          let rows: any[] = result.result?.stock_record ?? []
+          return { cabbageUseRecord: rows[0] ?? null }
+        },
+        check(result) {
+          let rows: any[] = result.result?.stock_record ?? []
+          CheckUtil.expectEqual(rows.length, 1, `白菜报损流水应为1条，实际${rows.length}`)
+          CheckUtil.expectEqual(
+            StockUtil.isEq(
+              { cnt: Number(rows[0]?.cnt), buyUnitFee: Number(rows[0]?.buyUnitFee) },
+              { cnt: -5, buyUnitFee: 1 }
+            ),
+            true,
+            `报损数量应为-5/1，实际${rows[0]?.cnt}/${rows[0]?.buyUnitFee}`
+          )
+          CheckUtil.expectEqual(Number(rows[0]?.cost), 0, `报损cost应为0，实际${rows[0]?.cost}`)
+        }
+      }),
+      new Action({
+        name: '白菜报损流水',
+        highlight: true,
+        url: '/app/state2/schStockRecord',
+        param: sch('otherUse', '白菜', '2026-09-06', '2026-09-06')
+      }, {
+        buildVariable(result) {
+          let content: any[] = result.result?.content ?? []
+          return { cabbageUseId: content[0]?.stockRecordId }
+        },
+        check(result) {
+          let content: any[] = result.result?.content ?? []
+          let raw = variable?.cabbageUseRecord ?? {}
+          CheckUtil.expectEqual(content.length, 1, `白菜报损应为1条，实际${content.length}`)
+          expectQty(content[0], '白菜报损', 5, 1)
+          expectPrice(
+            content[0],
+            '白菜报损',
+            Math.abs(Number(raw.costOfChange ?? 0)),
+            -5
+          )
+          CheckUtil.expectEqual(content[0]?.bussinessDate, '2026-09-06', `报损日期应为2026-09-06，实际${content[0]?.bussinessDate}`)
+        }
+      }),
+      new Action({
+        name: '报损流水对应单据',
+        highlight: true,
+        url: '/app/state2/getNoteByStockRecordId',
+        param: { stockRecordId: '${cabbageUseId}' }
+      }, {
+        check(result) {
+          let bill = result.result ?? {}
+          CheckUtil.expectEqual(bill.type, 'otherUse', `类型应为otherUse，实际${bill.type}`)
+          let data = bill.data ?? {}
+          CheckUtil.expectEqual(data.otherType?.name, '报损', `类型应为报损，实际${data.otherType?.name}`)
+          CheckUtil.expectEqual(Number(data.materialCnt), 2, `物料数应为2，实际${data.materialCnt}`)
+          CheckUtil.expectEqual(data.cost == null, true, `其他出入库单不返回cost，实际${data.cost}`)
+          CheckUtil.expectEqual(data.createTime, '2026-09-06', `创建时间应为2026-09-06，实际${data.createTime}`)
+          CheckUtil.expectEqual(
+            data.userOfAdd?.name != null && data.userOfAdd.name !== '',
+            true,
+            '报损单应有增加人'
+          )
+        }
+      }),
+      new Action({
+        name: '白菜销售流水',
+        highlight: true,
+        url: '/app/state2/schStockRecord',
+        param: sch('sales', '白菜', '2026-09-03', '2026-09-03')
+      }, {
+        buildVariable(result) {
+          let content: any[] = result.result?.content ?? []
+          return { cabbageSalesId: content[0]?.stockRecordId }
+        },
+        check(result) {
+          let content: any[] = result.result?.content ?? []
+          CheckUtil.expectEqual(content.length, 1, `9月3日白菜销售应为1条，实际${content.length}`)
+          CheckUtil.expectEqual(content[0]?.type, 'sales', `类型应为sales，实际${content[0]?.type}`)
+          CheckUtil.expectEqual(Number(content[0]?.cnt) > 0, true, `销售数量应为正数，实际${content[0]?.cnt}`)
+        }
+      }),
+      new Action({
+        name: '销售流水没有单据',
+        highlight: true,
+        url: '/app/state2/getNoteByStockRecordId',
+        param: { stockRecordId: '${cabbageSalesId}' }
+      }, {
+        check(result) {
+          let bill = result.result ?? {}
+          CheckUtil.expectEqual(bill.type == null && bill.data == null, true, `销售流水不应返回单据，实际${JSON.stringify(bill)}`)
+        }
+      })
+    ]
+  }
+
+  /**
+   * 餐品按物料查，物料成本按分类查。
+   * 排序参数交给父类。不传 orderBy，或传了别的字段，父类都会再按 amount 倒序。
+   * 9 月蔬菜含洋葱，不含 10 月才出现的无单价。
+   */
+  private checkMaterialSearch(): BaseTest[] {
+    return [
+      this.listProductByMaterial('按白菜查餐品', '白菜', ['羊肉炒白菜']),
+      this.listProductByMaterial('按羊肉查餐品', '羊肉', ['羊肉炒白菜', '萝卜煮羊肉']),
+      this.listProductByMaterial('按洋葱查餐品', '洋葱', ['洋葱按斤', '洋葱按克']),
+      this.listProductByMaterial('按塑料杯查餐品', '塑料杯', []),
+      this.listMaterialByCategory({
+        name: '按肉类查物料成本',
+        category: '肉类',
+        names: ['牛肉', '羊肉']
+      }),
+      this.listMaterialByCategory({
+        name: '按蔬菜查物料成本',
+        category: '蔬菜',
+        names: ['白菜', '萝卜', '番茄', '塑料杯', '洋葱']
+      }),
+      this.listMaterialByCategory({
+        name: '按蛋类查物料成本',
+        category: '蛋类',
+        names: ['鸡蛋']
+      }),
+      this.listMaterialByCategory({
+        name: '不存在的分类',
+        categoryId: '-1',
+        names: []
+      }),
+      this.listMaterialByCategory({
+        name: '蔬菜传入名称排序',
+        category: '蔬菜',
+        orderBy: 'name',
+        desc: 'asc',
+        names: ['白菜', '萝卜', '番茄', '塑料杯', '洋葱']
+      })
+    ]
+  }
+
+  private listProductByMaterial(name: string, material: string, names: string[]): Action {
+    return new Action({
+      name,
+      url: '/app/product/listProduct',
+      param: {
+        materialId: `\${materialMap.${material}.materialId}`
+      }
+    }, {
+      check(result) {
+        let content: any[] = result.result?.content ?? []
+        let actual = content.map(row => row.name).sort().join(',')
+        let expect = [...names].sort().join(',')
+        CheckUtil.expectEqual(actual, expect, `${name}应为${expect || '空'}，实际=${actual || '空'}`)
+      }
+    })
+  }
+
+  private listMaterialByCategory(opt: {
+    name: string
+    category?: string
+    categoryId?: string
+    orderBy?: string
+    desc?: string
+    names: string[]
+  }): Action {
+    let param: any = {
+      warehouseId: '${warehouse.warehouseId}',
+      begin: '2026-09-01',
+      end: '2026-09-30',
+      pageSize: 100,
+      categoryId: opt.categoryId ?? `\${categoryMap.${opt.category}}`
+    }
+    if (opt.orderBy != null) {
+      param.orderBy = opt.orderBy
+      param.desc = opt.desc
+    }
+    return new Action({
+      name: opt.name,
+      url: '/app/state2/listMaterialAmount',
+      param
+    }, {
+      check(result) {
+        let content: any[] = result.result?.content ?? []
+        let actual = content.map(row => row.name)
+        let expect = opt.names
+        for (let i = 1; i < content.length; i++) {
+          CheckUtil.expectEqual(
+            Number(content[i - 1].amount) >= Number(content[i].amount),
+            true,
+            `${opt.name}应按amount倒序`
+          )
+        }
+        actual = [...actual].sort()
+        expect = [...expect].sort()
+        CheckUtil.expectEqual(
+          actual.join(','),
+          expect.join(','),
+          `${opt.name}应为${expect.join(',') || '空'}，实际=${actual.join(',') || '空'}`
+        )
+        if (opt.category != null) {
+          for (let row of content) {
+            CheckUtil.expectEqual(
+              row?.category?.name,
+              opt.category,
+              `${opt.name}${row?.name}分类应为${opt.category}，实际${row?.category?.name}`
+            )
+          }
+        }
+      }
+    })
   }
 
   private listProduct(): Action {

@@ -1,3 +1,4 @@
+import path from "path";
 import { ArrayUtil, BaseTest, CheckUtil, TestCase } from "testflow";
 import StockUtil from "../../util/StockUtil";
 import PreTestWithMeat from "../PreTestWithMeat";
@@ -9,13 +10,16 @@ import CheckStock from "../../action/CheckStock";
 import CheckArray from "../../action/CheckArray";
 import CheckCnt from "../../action/CheckCnt";
 import ListNoteGroup from "../../action/note/ListNoteGroup";
+import Upload from "../../action/Upload";
+import ExcelUploadUtil from "../../util/ExcelUploadUtil";
 
 /**
- * 其他消耗全流程（见同目录 FlowOtherUse.md）。
+ * 其他耗用、其他入库和导入（见同目录 FlowOtherUse.md）。
  *
  * 物料规格见 PreTestWithMeat：
- * - 羊肉/猪肉：标准单位=克；按包用 buyUnitFee=-100
+ * - 羊肉：标准单位=克；按包用 buyUnitFee=-100
  * - 牛肉：标准单位=包；按包用 buyUnitFee=1
+ * - 猪肉：标准单位=克；buyUnitFee=1
  * - 西瓜：标准单位=个；buyUnitFee=1，其他入库单价 10 元/个
  *
  * 库存时间轴：
@@ -23,16 +27,17 @@ import ListNoteGroup from "../../action/note/ListNoteGroup";
  * - 7/1 createNote→发送→入库（累加，2元/g），再 updateNoteTime 改业务日
  * - 之后 OtherUse 增删改与改日期（isAdd=0）
  * - 删除后再做其他入库（isAdd=1，赠予）：含西瓜 5 个，再改为 8 个并删除猪肉
+ * - 最后导入写入已有单据：不校验日期和类型，已有明细保留，相同物料数量累加
  *
  * md「牛肉改为1包50g」按 1包+50g=150g=1.5包；「周肉」按猪肉。
  */
 export default class extends TestCase {
   constructor() {
-    super({ remark: '其他消耗：盘点→订单入库→消耗→改明细→改日期→删除→其他入库，并校验库存和金额' })
+    super({ remark: '其他耗用：盘点、消耗、其他入库，再导入到已有单据并校验库存和金额' })
   }
 
   getName(): string {
-    return '其他消耗'
+    return '其他耗用'
   }
 
   protected buildActions(): BaseTest[] {
@@ -44,7 +49,14 @@ export default class extends TestCase {
         categoryId: '${categoryMap.蔬菜}',
         code: 'MAT004'
       }),
+      new AddMaterial('空价菜', {
+        buyUnit: [{ name: '斤', fee: 1 }],
+        categoryId: '${categoryMap.蔬菜}',
+        code: 'MAT005',
+        suppliers: []
+      }),
       new ListMaterial(),
+      this.buildGetMaterialPrice(),
 
       this.buildInventoryAction({
         remark: '5月1日盘点：牛肉1包、羊肉2包、猪肉300g，单价1元/g',
@@ -294,7 +306,9 @@ export default class extends TestCase {
             { name: '西瓜', cnt: 8, buyUnitFee: 1, price: 10, stockBuyUnitFee: 1, cost: 80 }
           ]
         }
-      }, variable)
+      }, variable),
+
+      new ImportOtherUse()
     ]
   }
 
@@ -454,6 +468,42 @@ export default class extends TestCase {
         actions
       })
     ]
+  }
+
+  /** 默认供应商价。空价菜和没有的 id 不返回。 */
+  private buildGetMaterialPrice(): Action {
+    return new Action({
+      name: 'getMaterialPrice',
+      remark: '牛肉、猪肉返回 price 和 buyUnitFee；空价菜不返回',
+      url: '/app/material/getMaterialPrice',
+      param: {
+        warehouseId: '${warehouse.warehouseId}',
+        materialIds: [
+          '${materialMap.牛肉.materialId}',
+          '${materialMap.空价菜.materialId}',
+          999999001,
+          '${materialMap.猪肉.materialId}'
+        ]
+      }
+    }, {
+      check: (result) => {
+        let list: any[] = result.result ?? []
+        CheckUtil.expectEqual(Array.isArray(list), true, 'getMaterialPrice 应返回数组')
+        CheckUtil.expectEqual(list.length, 2, `应返回2条，实际=${list.length}`)
+        this.expectMaterialPrice(list[0], '牛肉', 21, 1)
+        this.expectMaterialPrice(list[1], '猪肉', 21, 1)
+      }
+    })
+  }
+
+  private expectMaterialPrice(row: any, name: string, price: number, buyUnitFee: number) {
+    let materialId = this.getVariable().materialMap?.[name]?.materialId
+    CheckUtil.expectEqual(String(row?.materialId), String(materialId), `应返回${name}`)
+    CheckUtil.expectEqual(row?.stockUnitsId != null, true, `${name}应返回 stockUnitsId`)
+    CheckUtil.expectEqual(StockUtil.isEqPrice(
+      { price: Number(row.price), buyUnitFee: Number(row.buyUnitFee) },
+      { price, buyUnitFee }
+    ), true, `${name}价格不对，实际 price=${row?.price} buyUnitFee=${row?.buyUnitFee}`)
   }
 }
 
@@ -722,5 +772,459 @@ class VerifyStep extends TestCase {
 
   protected buildActions(): BaseTest[] {
     return this.opt.actions
+  }
+}
+
+/**
+ * 导入写入已有单据。日期和类型不再校验。
+ * 已有明细保留，相同物料数量累加；其他入库按金额反算单价。
+ */
+class ImportOtherUse extends TestCase {
+  constructor() {
+    super({ remark: '导入到已有单据：其他入库、其他耗用，失败不改明细' })
+  }
+
+  getName(): string {
+    return '导入到已有单据'
+  }
+
+  protected getFile(name: string): string {
+    if (!name.endsWith('.xlsx')) {
+      name += '.xlsx'
+    }
+    return path.join(__dirname, '../../../excel/flowOtherUse/', name)
+  }
+
+  protected buildActions(): BaseTest[] {
+    return [
+      new Action({
+        name: '新增类型天上掉的',
+        remark: '其他入库类型 isAdd=1',
+        url: '/app/otherType/addOtherType',
+        param: {
+          name: '天上掉的',
+          isAdd: 1
+        }
+      }),
+      new Action({
+        name: '取出天上掉的',
+        remark: '记下天上掉的类型 id',
+        url: '/app/otherType/listOtherType',
+        param: {
+          isAdd: 1
+        }
+      }, {
+        buildVariable(result) {
+          let content = result.result?.content ?? []
+          let row = content.find((item: any) => item.name == '天上掉的')
+          CheckUtil.expectEqual(row != null, true, '未找到天上掉的')
+          return {
+            skyTypeId: row.otherTypeId
+          }
+        }
+      }),
+
+      this.buildCreateUse({
+        name: '新增天上掉的',
+        remark: '2026-07-20 天上掉的，先有西瓜2个',
+        day: '2026-07-20',
+        isAdd: 1,
+        typeExpr: '${skyTypeId}',
+        idKey: 'skyUseId',
+        otherItems: [{
+          materialId: '${materialMap.西瓜.materialId}',
+          cnt: 2,
+          buyUnitFee: 1,
+          price: 10,
+          stockBuyUnitFee: 1
+        }]
+      }),
+      ...this.buildFailUpload(
+        '导入其他入库（错误）',
+        'OtherInstock',
+        '其他入库错误',
+        'instockErrorNo',
+        'skyUseId'
+      ),
+      this.buildQueryItems('错误导入未改天上掉的', 'skyUseId', (rows) => {
+        CheckUtil.expectEqual(rows.length, 1, `天上掉的应仍是1条明细，实际=${rows.length}`)
+        this.checkLine(rows, '西瓜', { cnt: 2, buyUnitFee: 1 }, { price: 10, buyUnitFee: 1 }, '错误导入后西瓜')
+      }),
+
+      ...this.buildUpload(
+        '导入天上掉的猪肉',
+        'OtherInstock',
+        '其他入库天上掉的',
+        'skyUseId',
+        (importResult) => {
+          CheckUtil.expectEqual(importResult?.checked, true, '天上掉的应导入成功')
+        }
+      ),
+      this.buildQueryUse('校验天上掉的', 'skyUseId', (doc, rows) => {
+        CheckUtil.expectEqual(Number(doc.cost), 220, `天上掉的金额应为220，实际=${doc.cost}`)
+        CheckUtil.expectEqual(rows.length, 2, `天上掉的应有2条明细，实际=${rows.length}`)
+        this.checkLine(rows, '西瓜', { cnt: 2, buyUnitFee: 1 }, { price: 10, buyUnitFee: 1 }, '天上掉的西瓜')
+        this.checkLine(rows, '猪肉', { cnt: 100, buyUnitFee: 1 }, { price: 2, buyUnitFee: 1 }, '天上掉的猪肉')
+      }),
+
+      this.buildCreateUse({
+        name: '新增7月21日赠予',
+        remark: '2026-07-21 赠予，先有西瓜1个',
+        day: '2026-07-21',
+        isAdd: 1,
+        typeExpr: '${otherInstockTypeId}',
+        idKey: 'giftUseId',
+        otherItems: [{
+          materialId: '${materialMap.西瓜.materialId}',
+          cnt: 1,
+          buyUnitFee: 1,
+          price: 10,
+          stockBuyUnitFee: 1
+        }]
+      }),
+      ...this.buildUpload(
+        '导入赠予西瓜',
+        'OtherInstock',
+        '其他入库赠予',
+        'giftUseId',
+        (importResult) => {
+          CheckUtil.expectEqual(importResult?.checked, true, '赠予应导入成功')
+        }
+      ),
+      this.buildQueryUse('校验赠予合并', 'giftUseId', (doc, rows) => {
+        CheckUtil.expectEqual(Number(doc.cost), 30, `赠予金额应为30，实际=${doc.cost}`)
+        CheckUtil.expectEqual(rows.length, 1, `赠予应仍是1条明细，实际=${rows.length}`)
+        this.checkLine(rows, '西瓜', { cnt: 2, buyUnitFee: 1 }, { price: 30, buyUnitFee: -2 }, '赠予西瓜')
+      }),
+
+      this.buildCreateUse({
+        name: '新增7月22日员工餐',
+        remark: '空的其他耗用，等导入写入',
+        day: '2026-07-22',
+        isAdd: 0,
+        typeExpr: '${otherTypeMap.员工餐}',
+        idKey: 'mealUseId'
+      }),
+      ...this.buildFailUpload(
+        '导入其他耗用（错误）',
+        'OtherUse',
+        '其他消耗错误',
+        'useErrorNo',
+        'mealUseId'
+      ),
+      this.buildQueryItems('错误导入未写入员工餐', 'mealUseId', (rows) => {
+        CheckUtil.expectEqual(rows.length, 0, `员工餐应仍无明细，实际=${rows.length}`)
+      }),
+      ...this.buildUpload(
+        '导入员工餐',
+        'OtherUse',
+        '其他消耗员工餐',
+        'mealUseId',
+        (importResult) => {
+          CheckUtil.expectEqual(importResult?.checked, true, '员工餐应导入成功')
+        }
+      ),
+      this.buildQueryUse('校验员工餐', 'mealUseId', (doc, rows) => {
+        CheckUtil.expectEqual(Number(doc.cost), 0, `员工餐金额应为0，实际=${doc.cost}`)
+        CheckUtil.expectEqual(rows.length, 1, `员工餐应合并成1条明细，实际=${rows.length}`)
+        this.checkLine(rows, '西瓜', { cnt: 2, buyUnitFee: 1 }, null, '员工餐西瓜')
+      }),
+
+      new Recal().setRemark('导入后重算库存'),
+      new CheckStock({
+        array: [
+          { materialId: '${materialMap.牛肉.materialId}', cnt: 7, buyUnitFee: 1 },
+          { materialId: '${materialMap.羊肉.materialId}', cnt: 7, buyUnitFee: -100 },
+          { materialId: '${materialMap.猪肉.materialId}', cnt: 1000, buyUnitFee: 1 },
+          { materialId: '${materialMap.西瓜.materialId}', cnt: 10, buyUnitFee: 1 }
+        ]
+      }).setRemark('牛7包、羊7包、猪1000g、西瓜10个'),
+      new CheckCnt([
+        { table: 'otherUse', cnt: 4 },
+        { table: 'otherItem', cnt: 6 },
+        { table: 'stockRecord', cnt: 1, query: { type: 'otherUse' } }
+      ]).setRemark('4条单据、6条明细、1条其他耗用流水'),
+      new Action({
+        name: '校验导入后库存金额',
+        remark: '牛900、羊1100、猪1600、西瓜110',
+        url: '/free/query',
+        param: {
+          array: [{
+            table: 'stock',
+            query: {
+              warehouseId: '${warehouse.warehouseId}',
+              warehouseGroupId: '${warehouse.warehouseGroupId}',
+              isDel: 0
+            }
+          }, {
+            table: 'otherUse',
+            query: {
+              otherUseId: '${otherInstockId}',
+              warehouseId: '${warehouse.warehouseId}',
+              isDel: 0
+            }
+          }]
+        }
+      }, {
+        check: (result) => {
+          let stocks: any[] = result.result?.stock ?? []
+          let costs = [
+            { name: '牛肉', cost: 900 },
+            { name: '羊肉', cost: 1100 },
+            { name: '猪肉', cost: 1600 },
+            { name: '西瓜', cost: 110 }
+          ]
+          for (let expect of costs) {
+            let stock = this.findByMaterial(stocks, expect.name)
+            CheckUtil.expectEqual(stock != null, true, `${expect.name}库存不存在`)
+            CheckUtil.expectEqual(Number(stock.cost), expect.cost, `${expect.name}库存金额应为${expect.cost}，实际=${stock.cost}`)
+          }
+          let july3: any[] = result.result?.otherUse ?? []
+          CheckUtil.expectEqual(july3.length, 1, '7月3日其他入库应还在')
+          CheckUtil.expectEqual(Number(july3[0].cost), 180, `7月3日单据金额应为180，实际=${july3[0].cost}`)
+        }
+      })
+    ]
+  }
+
+  private buildCreateUse(opt: {
+    name: string
+    remark: string
+    day: string
+    isAdd: number
+    typeExpr: string
+    idKey: string
+    otherItems?: any[]
+  }): Action {
+    return new Action({
+      name: opt.name,
+      remark: opt.remark,
+      url: '/app/otherUse/saveOtherUse',
+      param: {
+        warehouseId: '${warehouse.warehouseId}',
+        openTypeId: opt.typeExpr,
+        isAdd: opt.isAdd,
+        createTime: opt.day,
+        remark: opt.remark,
+        otherItems: opt.otherItems ?? []
+      }
+    }, {
+      buildVariable(result) {
+        let otherUseId = result.result?.otherUseId
+        CheckUtil.expectEqual(otherUseId != null, true, `${opt.name} 未返回 otherUseId`)
+        return {
+          [opt.idKey]: otherUseId
+        }
+      }
+    })
+  }
+
+  private buildQueryItems(name: string, idKey: string, checkRows: (rows: any[]) => void): Action {
+    return new Action({
+      name,
+      remark: name,
+      url: '/free/query',
+      param: {
+        array: [{
+          table: 'otherItem',
+          query: {
+            otherUseId: `\${${idKey}}`,
+            warehouseId: '${warehouse.warehouseId}',
+            warehouseGroupId: '${warehouse.warehouseGroupId}',
+            isDel: 0
+          }
+        }]
+      }
+    }, {
+      check: (result) => {
+        checkRows(result.result?.otherItem ?? [])
+      }
+    })
+  }
+
+  private buildQueryUse(
+    name: string,
+    idKey: string,
+    checkDoc: (doc: any, rows: any[]) => void
+  ): Action {
+    return new Action({
+      name,
+      remark: name,
+      url: '/free/query',
+      param: {
+        array: [{
+          table: 'otherUse',
+          query: {
+            otherUseId: `\${${idKey}}`,
+            warehouseId: '${warehouse.warehouseId}',
+            isDel: 0
+          }
+        }, {
+          table: 'otherItem',
+          query: {
+            otherUseId: `\${${idKey}}`,
+            warehouseId: '${warehouse.warehouseId}',
+            warehouseGroupId: '${warehouse.warehouseGroupId}',
+            isDel: 0
+          }
+        }]
+      }
+    }, {
+      check: (result) => {
+        let docs: any[] = result.result?.otherUse ?? []
+        CheckUtil.expectEqual(docs.length, 1, `${name} 单据不存在`)
+        checkDoc(docs[0], result.result?.otherItem ?? [])
+      }
+    })
+  }
+
+  /**
+   * 列未全部匹配时走 saveExcel。
+   * otherUseId 随上传参数写入 excelFile.param。
+   */
+  private buildUpload(
+    name: string,
+    target: string,
+    fileName: string,
+    otherUseIdKey: string,
+    checkImport?: (importResult: any) => void,
+    buildImportVariable?: (importResult: any, topResult?: any) => any
+  ): BaseTest[] {
+    return [
+      new Upload({
+        name,
+        remark: name,
+        param: {
+          target,
+          warehouseId: '${warehouse.warehouseId}',
+          otherUseId: `\${${otherUseIdKey}}`
+        },
+        filePath: this.getFile(fileName)
+      }, {
+        buildVariable(result) {
+          let data = result.result ?? {}
+          let importResult = data.allMap ? (data.importResult ?? {}) : {}
+          let extra = buildImportVariable ? (buildImportVariable(importResult, data) ?? {}) : {}
+          return {
+            excelFileId: data.excelFileId,
+            fileCols: ExcelUploadUtil.buildSaveFileCols(data.fileCols),
+            allMap: !!data.allMap,
+            ...extra
+          }
+        },
+        check(result) {
+          let data = result.result
+          if (data?.allMap && checkImport) {
+            checkImport(data.importResult)
+          }
+        }
+      }),
+      new Action({
+        name: `saveExcel[${name}]`,
+        remark: '列未全部自动匹配时再保存导入',
+        url: '/app/excel/saveExcel',
+        param: {
+          excelFileId: '${excelFileId}',
+          fileCols: '${fileCols}',
+          warehouseId: '${warehouse.warehouseId}'
+        }
+      }, {
+        needRunVariable: {
+          key: 'allMap',
+          not: true
+        },
+        buildVariable(result) {
+          if (!buildImportVariable) {
+            return {}
+          }
+          let data = result.result ?? {}
+          return buildImportVariable(data, data) ?? {}
+        },
+        check(result) {
+          if (checkImport) {
+            checkImport(result.result)
+          }
+        }
+      })
+    ]
+  }
+
+  private buildFailUpload(
+    name: string,
+    target: string,
+    fileName: string,
+    errorNoKey: string,
+    otherUseIdKey: string
+  ): BaseTest[] {
+    return [
+      ...this.buildUpload(
+        name,
+        target,
+        fileName,
+        otherUseIdKey,
+        (importResult) => {
+          CheckUtil.expectEqual(importResult?.checked, false, `${name} 应失败`)
+        },
+        (importResult, topResult) => {
+          let errorNo = importResult?.errorNo ?? topResult?.importResult?.errorNo ?? topResult?.errorNo
+          return {
+            [errorNoKey]: errorNo
+          }
+        }
+      ),
+      new Action({
+        name: `查询导入错误[${name}]`,
+        remark: '只应出现物料不存在，日期和类型不再报错',
+        url: '/free/query',
+        param: {
+          array: [{
+            table: 'excelError',
+            query: {
+              errorNo: `\${${errorNoKey}}`,
+              isDel: 0
+            }
+          }]
+        }
+      }, {
+        check(result) {
+          let array: any[] = result.result?.excelError ?? []
+          let msgs = array.map(row => String(row.errorMsg ?? '')).join(';')
+          let parts = msgs.split(';').map(text => text.trim().replace(/。/g, '')).filter(text => text !== '')
+          CheckUtil.expectEqual(parts.includes('物料不存在'), true, `${name} 应有物料不存在，实际=${msgs}`)
+          CheckUtil.expectEqual(parts.includes('类型不存在'), false, `${name} 不应再报类型不存在，实际=${msgs}`)
+          CheckUtil.expectEqual(parts.includes('日期不能为空'), false, `${name} 不应再报日期，实际=${msgs}`)
+          let extra = parts.filter(text => text !== '物料不存在')
+          CheckUtil.expectEqual(extra.length, 0, `${name} 出现了其他错误，实际=${msgs}`)
+        }
+      })
+    ]
+  }
+
+  private checkLine(
+    rows: any[],
+    name: string,
+    qty: { cnt: number, buyUnitFee: number },
+    price: { price: number, buyUnitFee: number } | null,
+    label: string
+  ) {
+    let row = this.findByMaterial(rows, name)
+    CheckUtil.expectEqual(row != null, true, `${label}不存在`)
+    CheckUtil.expectEqual(StockUtil.isEq(
+      { cnt: Number(row.cnt), buyUnitFee: Number(row.buyUnitFee) },
+      qty
+    ), true, `${label}数量不对，实际 cnt=${row.cnt} buyUnitFee=${row.buyUnitFee}`)
+    if (price == null) {
+      CheckUtil.expectEqual(row.price == null || row.price === '', true, `${label}不应写价格，实际=${row.price}`)
+      return
+    }
+    CheckUtil.expectEqual(StockUtil.isEqPrice(
+      { price: Number(row.price), buyUnitFee: Number(row.stockBuyUnitFee) },
+      price
+    ), true, `${label}单价不对，实际 price=${row.price} stockBuyUnitFee=${row.stockBuyUnitFee}`)
+  }
+
+  private findByMaterial(rows: any[], name: string): any {
+    let materialId = this.getVariable().materialMap?.[name]?.materialId
+    return rows.find(row => String(row.materialId) === String(materialId))
   }
 }
